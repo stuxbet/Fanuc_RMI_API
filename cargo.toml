@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "sender",
+    "shared_def",
+    "sim",
+]
