@@ -47,19 +47,6 @@ pub struct FrameData {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Configuration {
-    utool_number: u8,
-    uframe_number: u8,
-    front: u8,
-    up: u8,
-    left: u8,
-    flip: u8,
-    turn4: u8,
-    turn5: u8,
-    turn6: u8,
-}
-
-#[derive(Serialize, Deserialize)]
 pub struct PositionData {
     x: f32,
     y: f32,
@@ -129,4 +116,98 @@ pub struct CommunicationPacketStruct {
 pub struct optionalInfo{
     pub group: Option<u8>
 
+}
+
+
+fn move_to() -> String{
+    let packet = MotionPacket {
+        Instruction: "FRC_LinearMotion".to_string(),
+        SequenceID: 1,
+        Configuration: Configuration {
+            UToolNumber: 1,
+            UFrameNumber: 1,
+            Front: 0,
+            Up: 1,
+            Left: 0,
+            Flip: 0,
+            Turn4: 0,
+            Turn5: 0,
+            Turn6: 0,
+        },
+        Position: Position {
+            X: 500.0,
+            Y: 0.0,
+            Z: 300.0,
+            W: 0.0,
+            P: 0.0,
+            R: 0.0,
+        },
+        SpeedType: SpeedType::mmSec,
+        Speed: 100,
+        TermType: TermType::FINE,
+    };
+
+    // Serialize to JSON string
+    // serde_json::to_string(&packet).unwrap()
+
+    match serde_json::to_string(&packet) {
+        Ok(json_packet) => {
+            println!("{}", json_packet);
+            json_packet
+        }
+        Err(e) => {
+            eprintln!("Error serializing packet: {}", e);
+            e.to_string()
+        }
+    }
+
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+enum TermType {
+    FINE,
+    CNT(u8), // CNT with a value from 1 to 100
+    CR(u8),  // CR with a value from 1 to 100
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+enum SpeedType {
+    mmSec,
+    InchMin,
+    Time,
+    mSec,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Configuration {
+    UToolNumber: u8,
+    UFrameNumber: u8,
+    Front: u8,
+    Up: u8,
+    Left: u8,
+    Flip: u8,
+    Turn4: u8,
+    Turn5: u8,
+    Turn6: u8,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Position {
+    X: f64,
+    Y: f64,
+    Z: f64,
+    W: f64,
+    P: f64,
+    R: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct MotionPacket {
+    Instruction: String,
+    SequenceID: u32,
+    Configuration: Configuration,
+    Position: Position,
+    SpeedType: SpeedType,
+    Speed: u16,
+    TermType: TermType,
 }
