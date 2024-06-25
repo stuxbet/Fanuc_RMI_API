@@ -1,68 +1,8 @@
-use std::error::Error;
-
-pub use serde::{Deserialize,Serialize};
 use serde_json;
 
+// use serde::{Deserialize, Serialize};
+use serde_derive::{Deserialize, Serialize};
 
-
-// #[derive(Serialize, Deserialize)]
-// pub enum Packet {
-//     Communication,
-//     Command,
-//     Instruction,
-//     Initialize,
-//     Abort,
-//     Disconnect
-// }
-
-// #[derive(Serialize, Deserialize)]
-// enum Communication{
-//     FRC_Connect,
-//     FRC_Disconnect,
-// }
-// #[derive(Serialize, Deserialize)]
-// enum Command{
-
-//     //intialize can specify a groupmask but defaults to 1
-//     FRC_Initialize,
-//     FRC_ReadPositionRegister,
-//     FRC_WritePositionRegister,
-//     FRC_SetOverride,
-//     FRC_GetStatus,
-//     FRC_GetUFrameUTool,
-//     FRC_ReadUToolData,
-//     FRC_WriteUToolData,
-//     FRC_ReadUFrameData,
-//     FRC_WriteUFrameDat,
-//     FRC_ReadJointAngles,
-//     FRC_ReadCartesianPosition,
-//     FRC_Reset,
-// }
-
-// enum FRC_Packet{
-//     CommandPacket: Packet(Command),
-//     CommunicationPacket: Packet(Communication)
-// }
-
-// impl Packet {
-//     // Serialize the packet into the required string format
-//     pub fn to_string(&self) -> Result<String, Error> {
-//         match serde_json::to_string(&self) {
-//             Ok(str) => Ok(str),
-//             Err(err) => Error::new("Could not serialize")
-//         }
-//         // let json_packet = match self {
-//         //     Packet::Communication => json!({"Communication": "FRC_Connect"}),
-//         //     Packet::Command => json!({"Command": "FRC_Disconnect"}),
-//         //     Packet::Initialize => json!({"Command": "FRC_Initialize"}),
-//         //     Packet::Instruction => json!({"Instruction": "FRC_Disconnect"}),
-//         //     Packet::Abort => json!({"Command": "FRC_Abort"}),
-//         //     Packet::Disconnect => json!({"Communication": "FRC_Disconnect"}),
-//         // };
-
-//         // format!("{}\r\n", json_packet.to_string())
-//     }
-// }
 
 #[derive(Serialize, Deserialize)]
 pub enum CommunicationPacket {
@@ -72,7 +12,8 @@ pub enum CommunicationPacket {
 
 #[derive(Serialize, Deserialize)]
 pub enum CommandPacket {
-    FRC_Initialize { group_mask: u8 },
+    FRC_Initialize,
+
     FRC_Abort,
     FRC_Pause,
     Continue,
@@ -146,17 +87,45 @@ pub enum InstructionPacket {
 #[derive(Serialize, Deserialize)]
 pub enum Packet {
     Communication(CommunicationPacket),
-    Command(CommandPacket),
+    Command(CommandPacketStruct),
     Instruction(InstructionPacket),
 }
+#[derive(Serialize, Deserialize)]
 
-// fn main() {
-//     // Example of creating a packet
-//     let packet = Packet::Command(CommandPacket::Initialize { group_mask: 1 });
+pub struct Attributes {
+    #[serde(flatten)]
+    extra: serde_json::Value,
+}
+/////////////////////////////////////////////////////////////////////////////////////////////
+/// on some new shit
+/////////////////////////////////////////////////////////////////////////////////////////////
+/// on some new shit
+/////////////////////////////////////////////////////////////////////////////////////////////
+/// on some new shit
+/////////////////////////////////////////////////////////////////////////////////////////////
+/// on some new shit
+/////////////////////////////////////////////////////////////////////////////////////////////
+/// on some new shit
+/////////////////////////////////////////////////////////////////////////////////////////////
+/// on some new shit
 
-//     // Serialize packet to JSON string
-//     let serialized_packet = to_string(&packet).unwrap();
-//     println!("{}", serialized_packet);
 
-//     // Send `serialized_packet` over a TCP/IP socket as needed
-// }
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "event_type", rename_all = "snake_case")]
+enum Event {
+    Login {
+        success: bool,
+    },
+    Logout {
+        reason: String,
+    },
+    Purchase {
+        amount: f64,
+    },
+}
+// #[serde(flatten)]
+#[derive(Serialize, Deserialize)]
+pub struct CommandPacketStruct {
+    pub CommandPacket: CommandPacket,
+    pub group: Option<u8>
+}
