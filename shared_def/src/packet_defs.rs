@@ -87,7 +87,7 @@ pub enum InstructionPacket {
 #[derive(Serialize, Deserialize)]
 pub enum Packet {
     Communication(CommunicationPacket),
-    Command(CommandPacketStruct),
+    Command(CommandPacket),
     Instruction(InstructionPacket),
 }
 #[derive(Serialize, Deserialize)]
@@ -97,17 +97,7 @@ pub struct Attributes {
     extra: serde_json::Value,
 }
 /////////////////////////////////////////////////////////////////////////////////////////////
-/// on some new shit
-/////////////////////////////////////////////////////////////////////////////////////////////
-/// on some new shit
-/////////////////////////////////////////////////////////////////////////////////////////////
-/// on some new shit
-/////////////////////////////////////////////////////////////////////////////////////////////
-/// on some new shit
-/////////////////////////////////////////////////////////////////////////////////////////////
-/// on some new shit
-/////////////////////////////////////////////////////////////////////////////////////////////
-/// on some new shit
+//new definition system
 
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -128,4 +118,15 @@ enum Event {
 pub struct CommandPacketStruct {
     pub CommandPacket: CommandPacket,
     pub group: Option<u8>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CommunicationPacketStruct {
+    pub Communication: CommunicationPacket,
+}
+
+
+pub struct optionalInfo{
+    pub group: Option<u8>
+
 }

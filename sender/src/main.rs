@@ -7,13 +7,16 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::time::sleep;
 use shared_def::packet_defs::*;
-use shared_def::packet_defs;
+use shared_def::packet_defs::Packet;
 // use shared_def::packet_defs::linea;
 
 
 
-async fn send_packet(stream: &mut TcpStream, serialized_packet:String) -> Result<serde_json::Value, Box<dyn Error>> {
+async fn send_packet(stream: &mut TcpStream, packet:Packet) -> Result<serde_json::Value, Box<dyn Error>> {
     // let packet = packet + "\r\n";
+
+    let serialized_packet: String = serde_json::to_string(&packet).unwrap() + "\r\n";
+
     stream.write_all(serialized_packet.as_bytes()).await?;
     println!("Sent: {}", serialized_packet);
 
@@ -58,9 +61,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stream = connect_with_retries(addr, 3).await?;
     println!("Connected to the server at {}", addr);
 
-    let serialized_packet: String = to_string(&Packet::Communication(CommunicationPacket::FRC_Connect )).unwrap();
 
-    let response = send_packet(&mut stream,serialized_packet ).await?;
+    //debug
+    let tester: String = to_string(&Packet::Command(CommandPacket::FRC_Initialize )).unwrap();
+    print!("tester packet:{}",tester);
+    //debug
+
+
+    let response = send_packet(&mut stream,Packet::Communication(CommunicationPacket::FRC_Connect ) ).await?;
 
     // if(response["major"] < major){println!("Not compatible");}
 
@@ -77,10 +85,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Initialize the robot
 
-    let initpacket = CommandPacketStruct{CommandPacket:CommandPacket::FRC_Initialize, group: Some(1)};
-    let serialized_packet: String = to_string(&initpacket).unwrap();
 
-    let send_status = send_packet(&mut new_stream, serialized_packet).await;
+
+    let send_status = send_packet(&mut new_stream, Packet::Command(CommandPacket::FRC_Initialize )).await;
     match send_status {
         Ok(_) => println!("Initialized connection with the robot"),
         Err(err) => {
@@ -93,13 +100,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     //FIXME:
     // send_packet(&mut new_stream, &linear_motion_packet_json).await?;
-    
+
 
     // // Abort the motion
-    // send_packet(&mut new_stream, Packet::Command(CommandPacket::FRC_Abort)).await?;
+    send_packet(&mut new_stream, Packet::Command(CommandPacket::FRC_Abort)).await?;
 
     // // Disconnect from the server
-    // send_packet(&mut new_stream, Packet::Communication(CommunicationPacket::FRC_Disconnect )).await?;
+    let echo = send_packet(&mut new_stream, Packet::Communication(CommunicationPacket::FRC_Disconnect )).await?;
 
     Ok(())
 }

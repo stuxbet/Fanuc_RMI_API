@@ -85,7 +85,7 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
 
         let request_json: serde_json::Value = serde_json::from_str(&request)?;
 
-        let response_json = match request_json["Command"].as_str() {
+        let mut response_json = match request_json["Command"].as_str() {
             Some("FRC_Initialize") => json!({
                 "Status": "Initialized"
             }),
@@ -98,9 +98,13 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
             Some("FRC_Disconnect") => json!({
                 "Status": "Disconnected"
             }),
-            _ => json!({
-                "Error": "Unknown command"
+            _ => json!({}),
+        };
+        response_json = match request_json["Communicate"].as_str() {
+            Some("FRC_Disconnect") => json!({
+                "Status": "Disconnect"
             }),
+            _ => response_json
         };
 
         let response = serde_json::to_string(&response_json)? + "\r\n";
