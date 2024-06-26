@@ -12,7 +12,6 @@ use shared_def::packet_functions::*;
 // use shared_def::packet_defs::linea;
 
 
-
 async fn send_packet(stream: &mut TcpStream, packet:String) -> Result<serde_json::Value,Box<dyn Error>> {
     // let packet = packet + "\r\n";
 
@@ -82,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Initialize the robot
 
-    let send_status = send_packet(&mut new_stream, Initialize_packet(None)).await;
+    let send_status = send_packet(&mut new_stream, Initialize_packet(Some(1))).await;
     match send_status {
         Ok(_) => println!("Initialized connection with the robot"),
         Err(err) => {
@@ -90,9 +89,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             return Ok(());
         }
     };
-
-    println!("Serialized LinearMotionPacket: {}", linear()); // Debugging line
-    println!("do this work?: {}", connect_packet()); // Debugging line
 
     //FIXME:
     // send_packet(&mut new_stream, &linear_motion_packet_json).await?;

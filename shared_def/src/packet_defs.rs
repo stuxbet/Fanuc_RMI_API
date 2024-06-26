@@ -13,7 +13,6 @@ pub enum CommunicationPacket {
 #[derive(Serialize, Deserialize)]
 pub enum CommandPacket {
     FRC_Initialize,
-
     FRC_Abort,
     FRC_Pause,
     Continue,
@@ -35,6 +34,26 @@ pub enum CommandPacket {
     WritePositionRegister { register_number: u16, configuration: Configuration, position: PositionData, group: Option<u8> },
     ReadTCPSpeed,
 }
+
+#[derive(Serialize, Deserialize)]
+pub enum InstructionPacket {
+    FRC_WaitDIN,            // Wait for DIN Instruction
+    FRC_SetUFrame,          // Set User Frame Instruction
+    FRC_SetUTool,           // Set User Tool Instruction
+    FRC_WaitTime,           // Add Wait Time Instruction
+    FRC_SetPayLoad,         // Set Payload Instruction
+    FRC_Call,               // Call a Program
+    FRC_LinearMotion,       // Add Linear Motion Instruction
+    FRC_LinearRelative,     // Add Linear Incremental Motion Instruction
+    FRC_JointMotion,        // Add Joint Motion Instruction
+    FRC_JointRelative,      // Add Joint Incremental Motion Instruction
+    FRC_CircularMotion,     // Add Circular Motion Instruction
+    FRC_CircularRelative,   // Add Circular Incremental Motion Instruction
+    FRC_JointMotionJRep,    // Add Joint Motion with Joint Representation
+    FRC_JointRelativeJRep,  // Add Joint Incremental Motion with Joint Representation
+    FRC_LinearMotionJRep,   // Add Linear Motion with Joint Representation
+}
+
 
 #[derive(Serialize, Deserialize)]
 pub struct FrameData {
@@ -59,17 +78,17 @@ pub struct PositionData {
     ext3: Option<f32>,
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum InstructionPacket {
-    WaitDIN { sequence_id: u32, port_number: u16, port_value: String },
-    SetUFrame { sequence_id: u32, frame_number: u8 },
-    SetUTool { sequence_id: u32, tool_number: u8 },
-    WaitTime { sequence_id: u32, time: f32 },
-    SetPayLoad { sequence_id: u32, schedule_number: u8 },
-    Call { sequence_id: u32, program_name: String },
-    LinearMotion { sequence_id: u32, configuration: Configuration, position: PositionData, speed_type: String, speed: u16, term_type: String, term_value: u8 },
-    // Add other instruction types as needed
-}
+// #[derive(Serialize, Deserialize)]
+// pub enum InstructionPacket {
+//     WaitDIN { sequence_id: u32, port_number: u16, port_value: String },
+//     SetUFrame { sequence_id: u32, frame_number: u8 },
+//     SetUTool { sequence_id: u32, tool_number: u8 },
+//     WaitTime { sequence_id: u32, time: f32 },
+//     SetPayLoad { sequence_id: u32, schedule_number: u8 },
+//     Call { sequence_id: u32, program_name: String },
+//     LinearMotion { sequence_id: u32, configuration: Configuration, position: PositionData, speed_type: String, speed: u16, term_type: String, term_value: u8 },
+//     // Add other instruction types as needed
+// }
 
 #[derive(Serialize, Deserialize)]
 pub enum Packet {
@@ -100,17 +119,11 @@ pub struct CommunicationPacketStruct {
 }
 
 
-pub struct optionalInfo{
-    pub group: Option<u8>
-
-}
-
-
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TermType {
     FINE,
-    CNT(u8), // CNT with a value from 1 to 100
-    CR(u8),  // CR with a value from 1 to 100
+    CNT, // CNT with a value from 1 to 100
+    CR,  // CR with a value from 1 to 100
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -144,9 +157,9 @@ pub struct Position {
     pub R: f64,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct MotionPacket {
-    pub Instruction: String,
+    pub Instruction: InstructionPacket,
     pub SequenceID: u32,
     pub Configuration: Configuration,
     pub Position: Position,
@@ -154,8 +167,8 @@ pub struct MotionPacket {
     pub Speed: u16,
     pub TermType: TermType,
 }
-
-pub struct SimplePacket {
-    command: String,
-    groupmask: u8,
+#[derive(Serialize, Deserialize)]
+pub struct initstructure {
+    pub Command: CommandPacket,
+    pub Groupmask: u8,
 }
