@@ -1,6 +1,4 @@
 use serde_json;
-
-// use serde::{Deserialize, Serialize};
 use serde_derive::{Deserialize, Serialize};
 
 
@@ -31,7 +29,7 @@ pub enum CommandPacket {
     SetOverRide { value: u8 },
     GetUFrameUTool { group: Option<u8> },
     ReadPositionRegister { register_number: u16, group: Option<u8> },
-    WritePositionRegister { register_number: u16, configuration: Configuration, position: PositionData, group: Option<u8> },
+    WritePositionRegister { register_number: u16, configuration: Configuration, position: Position, group: Option<u8> },
     ReadTCPSpeed,
 }
 
@@ -55,40 +53,7 @@ pub enum InstructionPacket {
 }
 
 
-#[derive(Serialize, Deserialize)]
-pub struct FrameData {
-    x: f32,
-    y: f32,
-    z: f32,
-    w: f32,
-    p: f32,
-    r: f32,
-}
 
-#[derive(Serialize, Deserialize)]
-pub struct PositionData {
-    x: f32,
-    y: f32,
-    z: f32,
-    w: f32,
-    p: f32,
-    r: f32,
-    ext1: Option<f32>,
-    ext2: Option<f32>,
-    ext3: Option<f32>,
-}
-
-// #[derive(Serialize, Deserialize)]
-// pub enum InstructionPacket {
-//     WaitDIN { sequence_id: u32, port_number: u16, port_value: String },
-//     SetUFrame { sequence_id: u32, frame_number: u8 },
-//     SetUTool { sequence_id: u32, tool_number: u8 },
-//     WaitTime { sequence_id: u32, time: f32 },
-//     SetPayLoad { sequence_id: u32, schedule_number: u8 },
-//     Call { sequence_id: u32, program_name: String },
-//     LinearMotion { sequence_id: u32, configuration: Configuration, position: PositionData, speed_type: String, speed: u16, term_type: String, term_value: u8 },
-//     // Add other instruction types as needed
-// }
 
 #[derive(Serialize, Deserialize)]
 pub enum Packet {
@@ -102,6 +67,47 @@ pub struct Attributes {
     #[serde(flatten)]
     extra: serde_json::Value,
 }
+
+//////////////////////////////////////////////////////////////////////////////////////
+/// Utilities
+////////////////////////////////////////////////////////////////////////////////////
+#[derive(Serialize, Deserialize)]
+pub struct FrameData {
+    x: f32,
+    y: f32,
+    z: f32,
+    w: f32,
+    p: f32,
+    r: f32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Position {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+    pub p: f32,
+    pub r: f32,
+    pub ext1: Option<f32>,
+    pub ext2: Option<f32>,
+    pub ext3: Option<f32>,
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Configuration {
+    pub UToolNumber: u8,
+    pub UFrameNumber: u8,
+    pub Front: u8,
+    pub Up: u8,
+    pub Left: u8,
+    pub Flip: u8,
+    pub Turn4: u8,
+    pub Turn5: u8,
+    pub Turn6: u8,
+}
+
+
+
 /////////////////////////////////////////////////////////////////////////////////////////////
 //new definition system
 
@@ -113,11 +119,12 @@ pub struct CommandPacketStruct {
     pub group: Option<u8>
 }
 
+
+//this looks dumb but serializes correctly?
 #[derive(Serialize, Deserialize)]
 pub struct CommunicationPacketStruct {
     pub Communication: CommunicationPacket,
 }
-
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TermType {
@@ -134,28 +141,9 @@ pub enum SpeedType {
     mSec,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Configuration {
-    pub UToolNumber: u8,
-    pub UFrameNumber: u8,
-    pub Front: u8,
-    pub Up: u8,
-    pub Left: u8,
-    pub Flip: u8,
-    pub Turn4: u8,
-    pub Turn5: u8,
-    pub Turn6: u8,
-}
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Position {
-    pub X: f64,
-    pub Y: f64,
-    pub Z: f64,
-    pub W: f64,
-    pub P: f64,
-    pub R: f64,
-}
+
+
 
 #[derive(Serialize, Deserialize)]
 pub struct MotionPacket {
