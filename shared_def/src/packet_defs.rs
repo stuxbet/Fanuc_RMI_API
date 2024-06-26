@@ -87,19 +87,6 @@ pub struct Attributes {
 //new definition system
 
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(tag = "event_type", rename_all = "snake_case")]
-enum Event {
-    Login {
-        success: bool,
-    },
-    Logout {
-        reason: String,
-    },
-    Purchase {
-        amount: f64,
-    },
-}
 // #[serde(flatten)]
 #[derive(Serialize, Deserialize)]
 pub struct CommandPacketStruct {
@@ -119,59 +106,15 @@ pub struct optionalInfo{
 }
 
 
-fn move_to() -> String{
-    let packet = MotionPacket {
-        Instruction: "FRC_LinearMotion".to_string(),
-        SequenceID: 1,
-        Configuration: Configuration {
-            UToolNumber: 1,
-            UFrameNumber: 1,
-            Front: 0,
-            Up: 1,
-            Left: 0,
-            Flip: 0,
-            Turn4: 0,
-            Turn5: 0,
-            Turn6: 0,
-        },
-        Position: Position {
-            X: 500.0,
-            Y: 0.0,
-            Z: 300.0,
-            W: 0.0,
-            P: 0.0,
-            R: 0.0,
-        },
-        SpeedType: SpeedType::mmSec,
-        Speed: 100,
-        TermType: TermType::FINE,
-    };
-
-    // Serialize to JSON string
-    // serde_json::to_string(&packet).unwrap()
-
-    match serde_json::to_string(&packet) {
-        Ok(json_packet) => {
-            println!("{}", json_packet);
-            json_packet
-        }
-        Err(e) => {
-            eprintln!("Error serializing packet: {}", e);
-            e.to_string()
-        }
-    }
-
-}
-
 #[derive(Serialize, Deserialize, Debug)]
-enum TermType {
+pub enum TermType {
     FINE,
     CNT(u8), // CNT with a value from 1 to 100
     CR(u8),  // CR with a value from 1 to 100
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-enum SpeedType {
+pub enum SpeedType {
     mmSec,
     InchMin,
     Time,
@@ -179,35 +122,40 @@ enum SpeedType {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Configuration {
-    UToolNumber: u8,
-    UFrameNumber: u8,
-    Front: u8,
-    Up: u8,
-    Left: u8,
-    Flip: u8,
-    Turn4: u8,
-    Turn5: u8,
-    Turn6: u8,
+pub struct Configuration {
+    pub UToolNumber: u8,
+    pub UFrameNumber: u8,
+    pub Front: u8,
+    pub Up: u8,
+    pub Left: u8,
+    pub Flip: u8,
+    pub Turn4: u8,
+    pub Turn5: u8,
+    pub Turn6: u8,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Position {
-    X: f64,
-    Y: f64,
-    Z: f64,
-    W: f64,
-    P: f64,
-    R: f64,
+pub struct Position {
+    pub X: f64,
+    pub Y: f64,
+    pub Z: f64,
+    pub W: f64,
+    pub P: f64,
+    pub R: f64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct MotionPacket {
-    Instruction: String,
-    SequenceID: u32,
-    Configuration: Configuration,
-    Position: Position,
-    SpeedType: SpeedType,
-    Speed: u16,
-    TermType: TermType,
+pub struct MotionPacket {
+    pub Instruction: String,
+    pub SequenceID: u32,
+    pub Configuration: Configuration,
+    pub Position: Position,
+    pub SpeedType: SpeedType,
+    pub Speed: u16,
+    pub TermType: TermType,
+}
+
+pub struct SimplePacket {
+    command: String,
+    groupmask: u8,
 }
