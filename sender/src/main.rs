@@ -1,4 +1,3 @@
-use serde_json::to_string;
 use tokio::net::TcpStream;
 use tokio::io::{AsyncWriteExt, AsyncReadExt};
 use serde_json;
@@ -6,16 +5,10 @@ pub use serde::{Deserialize,Serialize};
 use std::error::Error;
 use std::time::Duration;
 use tokio::time::sleep;
-// use shared_def::packet_defs::*;
 use shared_def::packet_functions::*;
-// use shared_def::packet_defs::Packet;
-// use shared_def::packet_defs::linea;
 
 
 async fn send_packet(stream: &mut TcpStream, packet:String) -> Result<serde_json::Value,Box<dyn Error>> {
-    // let packet = packet + "\r\n";
-
-    //let serialized_packet: String = serde_json::to_string(&packet).unwrap() + "\r\n";
 
     stream.write_all(packet.as_bytes()).await?;
     println!("Sent: {}", packet);
@@ -62,11 +55,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut stream = connect_with_retries(addr, 3).await?;
     println!("Connected to the server at {}", addr);
 
-
-
+    // this line sends a connection request packet to start the handshake
     let response = send_packet(&mut stream, connect_packet()).await?;
-
-    // if(response["major"] < major){println!("Not compatible");}
 
     // Extract the new port number from the response
     let new_port = response["PortNumber"].as_u64().ok_or("No port number in response")? as u16;
@@ -80,7 +70,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Connected to the secondary server at {}", new_addr);
 
     // Initialize the robot
-
     let send_status = send_packet(&mut new_stream, Initialize_packet(Some(1))).await;
     match send_status {
         Ok(_) => println!("Initialized connection with the robot"),
@@ -94,10 +83,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // send_packet(&mut new_stream, &linear_motion_packet_json).await?;
 
 
-    // // Abort the motion
+    //Abort the motion
     send_packet(&mut new_stream, Abort_packet()).await?;
 
-    // // Disconnect from the server
+    //Disconnect from the server
     let echo = send_packet(&mut new_stream, Disconnect_packet()).await?;
 
     Ok(())
