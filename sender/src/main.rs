@@ -6,7 +6,8 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::time::sleep;
 use shared_def::packet_functions::*;
-
+use std::error::Error as StdError;
+use std::io;
 
 async fn send_packet(stream: &mut TcpStream, packet:String) -> Result<serde_json::Value,Box<dyn Error>> {
 
@@ -23,12 +24,23 @@ async fn send_packet(stream: &mut TcpStream, packet:String) -> Result<serde_json
     let response = String::from_utf8_lossy(&buffer[..n]);
     println!("Received: {}", response);
 
-    // Parse JSON response
-    let response_json = serde_json::from_str(&response)?;
+    // Parse JSON response 
 
-    println!("Parsed response: {:?}", response_json);
+    match serde_json::from_str::<serde_json::Value>(&response) {
+        Ok(response_json) => {
+            // Successfully parsed JSON, you can use `response_json` here
+            println!("Parsed JSON: {:?}", response_json);
+            Ok(response_json)
 
-    Ok(response_json)
+        }
+        Err(e) => {
+            // Failed to parse JSON
+            println!("could not parse json: {}", e);
+            Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse json")))
+
+        }
+    }
+
 }
 
 async fn connect_with_retries(addr: &str, retries: u32) -> Result<TcpStream, Box<dyn Error>> {
@@ -52,7 +64,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 
     let addr = "127.0.0.1:16001"; // Change if the server is running on a different machine
-    let mut stream = connect_with_retries(addr, 3).await?;
+    let mut stream = connect_with_retries(addr, 3).await?;//.expect(format!("Could not connect to the server at {}", addr));
     println!("Connected to the server at {}", addr);
 
     // this line sends a connection request packet to start the handshake
