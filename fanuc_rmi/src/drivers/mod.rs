@@ -7,13 +7,13 @@ use crate::{commands::FrcInitialize, packets::*};
 
 pub struct FanucDriver {
     addr: String,
-    initialize_port: String,
+    initialize_port: u32,
     connection_port: Option<String>,
     tcp_stream: Option<Arc<Mutex<TcpStream>>>,
 }
 
 impl FanucDriver {
-    pub fn new(addr: String, initialize_port: String) -> FanucDriver {
+    pub fn new(addr: String, initialize_port: u32) -> FanucDriver {
         Self {
             addr,
             initialize_port,
@@ -119,7 +119,7 @@ impl FanucDriver {
 impl Default for FanucDriver {
     fn default() -> Self {
         let addr = "127.0.0.1".to_string(); // Change if the server is running on a different machine
-        let initialize_port = "16001".to_string();
+        let initialize_port = 16001;
         Self::new(addr, initialize_port)
     }
 }

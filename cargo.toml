@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "sender",
+    "example",
     "fanuc_rmi",
     "sim",
 ]
