@@ -71,7 +71,15 @@ impl FanucDriver {
 
         // Send a connection request packet to start the handshake
         let response = self.send::<CommandResponse>(packet).await?;
+        if let CommandResponse::FrcInitialize(ref res) = response {
+            if res.error_id != 0 {
+                println!("Error ID: {}", res.error_id);
+                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a initialization packet", res.error_id))));
+                // Err(format!("Fanuc threw a Error #{} on a initialization packet", res.error_id).into());
+            }
+        }
         Ok(())
+
     }
 
     async fn send<T>(&self, packet: String) -> Result<T, Box<dyn Error>>

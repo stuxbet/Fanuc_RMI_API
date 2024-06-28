@@ -25,3 +25,15 @@ impl Default for FrcInitialize {
         FrcInitialize::new(Some(1))
     }
 }
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FrcInitializeResponse { 
+    // #[serde(rename = "Command")]
+    // pub command: Command,    
+    #[serde(rename = "ErrorID")]
+    pub error_id: u32,
+    #[serde(rename = "GroupMask")]
+    pub group_mask: u16,
+
+}

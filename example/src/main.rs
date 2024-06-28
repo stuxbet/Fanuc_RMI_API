@@ -10,5 +10,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Err(e) => println!("Failed to connect: {}", e),
     }
     driver.initialize().await?;
+    
+
+
     Ok(())
 }
