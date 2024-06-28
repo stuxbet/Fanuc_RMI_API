@@ -1,18 +1,17 @@
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use serde::{Serialize, Deserialize};
 use serde_json::json;
 use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct ConnectResponse {
-    Communication: String,
-    PortNumber: Option<u16>,
-    MajorVersion: Option<u16>,
-    MinorVersion: Option<u16>,
-}
+// #[derive(Serialize, Deserialize, Debug)]
+// struct ConnectResponse {
+//     Communication: String,
+//     PortNumber: Option<u16>,
+//     MajorVersion: Option<u16>,
+//     MinorVersion: Option<u16>,
+// }
 
 async fn handle_client(mut socket: TcpStream, new_port: Arc<Mutex<u16>>) -> Result<u16, Box<dyn Error + Send + Sync>> {
     let mut buffer = vec![0; 2048];

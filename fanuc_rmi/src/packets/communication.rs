@@ -21,6 +21,12 @@ pub enum Communication {
 pub enum CommunicationResponse {
     #[serde(rename = "FRC_Connect")]
     FrcConnect(FrcConnectResponse),
+    #[serde(rename = "FRC_Disconnect")]
+    FrcDisconnect,
+    #[serde(rename = "FRC_Terminate")]
+    FrcTerminate,
+    #[serde(rename = "FRC_SystemFault")]
+    FrcSystemFault,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

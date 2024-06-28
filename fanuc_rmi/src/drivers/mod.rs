@@ -41,6 +41,7 @@ impl FanucDriver {
             _ => None,
         };
 
+
         // Close the initial connection
         self.close_connection();
 

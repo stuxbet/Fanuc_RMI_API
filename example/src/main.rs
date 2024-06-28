@@ -1,5 +1,4 @@
 use fanuc_rmi::drivers::FanucDriver;
-pub use serde::{Deserialize,Serialize};
 use std::error::Error;
 
 #[tokio::main]
