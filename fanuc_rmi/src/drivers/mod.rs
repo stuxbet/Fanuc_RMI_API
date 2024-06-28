@@ -49,7 +49,7 @@ impl FanucDriver {
             Some(port) => {
                 // Connect to the new port
                 let new_addr = format!("{}:{}",&self.addr, port);
-                let stream = connect_with_retries(&init_addr, 3).await?;
+                let stream = connect_with_retries(&new_addr, 3).await?;
                 println!("Connected to the secondary server at {}", new_addr);
                 self.tcp_stream = Some(Arc::new(Mutex::new(stream)));
             },
@@ -64,17 +64,14 @@ impl FanucDriver {
     }
 
     pub async fn initialize(&self) -> Result<(), Box<dyn Error>> {
-        match &self.tcp_stream {
-            Some(stream) => {
-                let mut stream = stream.lock().await;
-                // Serialize to JSON string
-                let packet = Command::FrcInitialize(FrcInitialize::default());
-                let packet = serde_json::to_string(&packet).unwrap() + "\r\n";
-                stream.write_all(packet.as_bytes()).await?;
-                Ok(())
-            }
-            None => Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot initialize robot without an open TCP stream"))),
-        }
+        // Create a connection packet
+        let packet = Command::FrcInitialize(FrcInitialize::default());
+        
+        let packet = serde_json::to_string(&packet).expect("Initalize packet didnt serialize") + "\r\n";
+
+        // Send a connection request packet to start the handshake
+        let response = self.send::<CommandResponse>(packet).await?;
+        Ok(())
     }
 
     async fn send<T>(&self, packet: String) -> Result<T, Box<dyn Error>>

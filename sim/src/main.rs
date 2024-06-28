@@ -5,6 +5,7 @@ use std::error::Error;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+
 // #[derive(Serialize, Deserialize, Debug)]
 // struct ConnectResponse {
 //     Communication: String,
@@ -28,7 +29,7 @@ async fn handle_client(mut socket: TcpStream, new_port: Arc<Mutex<u16>>) -> Resu
     }
 
     let request = String::from_utf8_lossy(&buffer[..n]);
-    println!("Received: {}", request);
+    println!("Received on primary : {}", request);
 
     let request_json: serde_json::Value = serde_json::from_str(&request)?;
 
@@ -42,6 +43,7 @@ async fn handle_client(mut socket: TcpStream, new_port: Arc<Mutex<u16>>) -> Resu
 
             json!({
                 "Communication": "FRC_Connect",
+                "ErrorID": 1,
                 "PortNumber": port,
                 "MajorVersion": 1,
                 "MinorVersion": 0,
@@ -64,6 +66,8 @@ async fn handle_client(mut socket: TcpStream, new_port: Arc<Mutex<u16>>) -> Resu
     Err("Failed to parse port number".into())
 }
 async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
+    // println!("Second client spawn");
+
     let mut buffer = vec![0; 1024];
     loop {
         let n = match socket.read(&mut buffer).await {
@@ -86,7 +90,9 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
 
         let mut response_json = match request_json["Command"].as_str() {
             Some("FRC_Initialize") => json!({
-                "Status": "Initialized"
+                "Command": "FRC_Initialize",
+                "ErrorID": 1,
+                "GroupMask": 1
             }),
             Some("FRC_LinearMotion") => json!({
                 "Status": "Motion started"
@@ -117,7 +123,15 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
 
 async fn start_secondary_server(port: u16) -> Result<(), Box<dyn Error + Send + Sync>> {
     let addr = format!("0.0.0.0:{}", port);
-    let listener = TcpListener::bind(&addr).await?;
+    // let listener = TcpListener::bind(&addr).await;
+    let listener = match TcpListener::bind(&addr).await {
+        Ok(listener) => listener,
+        Err(e) => {
+            eprintln!("Failed to bind to address {}: {}", addr, e);
+            return Err(Box::new(e));
+        }
+    };
+
     println!("Secondary server listening on port {}", port);
 
     loop {
@@ -159,6 +173,7 @@ async fn start_server(port: u16) -> Result<(), Box<dyn Error + Send + Sync>> {
             Ok(port) if port != 0 => {
                 println!("Starting secondary server on port {}", port);
                 tokio::spawn(start_secondary_server(port));
+
             },
             Ok(_) => {},
             Err(e) => eprintln!("Failed to handle client: {:?}", e),
@@ -171,3 +186,4 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     start_server(16001).await?;
     Ok(())
 }
+

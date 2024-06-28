@@ -32,5 +32,26 @@ pub enum Command {
     WritePositionRegister { register_number: u16, configuration: Configuration, position: Position, group: Option<u8> },
     ReadTCPSpeed,
 }
+#[serde(tag = "Command")]
+#[derive(Serialize, Deserialize, Debug)]
+pub enum CommandResponse {
+    #[serde(rename = "FRC_Initialize")]
+    FrcInitialize(FrcInitializeResponse),
+    #[serde(rename = "FRC_Abort")]
+    FrcAbort,
+    #[serde(rename = "FRC_Pause")]
+    FrcPause,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct FrcInitializeResponse { 
+    // #[serde(rename = "Command")]
+    // pub command: Command,    
+    #[serde(rename = "ErrorID")]
+    pub error_id: u32,
+    #[serde(rename = "GroupMask")]
+    pub group_mask: u16,
+
+}
 
 impl Packet for Command{}
