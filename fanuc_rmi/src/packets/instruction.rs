@@ -1,11 +1,12 @@
 use serde::{Serialize,Deserialize};
-
 use super::Packet;
+use crate::instructions::*;
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Instruction {
     #[serde(rename = "FRC_WaitDIN")]
-    FrcWaitDin,            // Wait for DIN Instruction
+    FrcWaitDIN(FrcWaitDIN),            // Wait for DIN Instruction
     #[serde(rename = "FRC_SetUFrame")]
     FrcSetUFrame,          // Set User Frame Instruction
     #[serde(rename = "FRC_SetUTool")]
@@ -34,6 +35,12 @@ pub enum Instruction {
     FrcJointRelativeJRep,  // Add Joint Incremental Motion with Joint Representation
     #[serde(rename = "FRC_LinearMotionJRep")]
     FrcLinearMotionJRep,   // Add Linear Motion with Joint Representation
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum OnOff{
+    ON,
+    OFF
 }
 
 impl Packet for Instruction{}

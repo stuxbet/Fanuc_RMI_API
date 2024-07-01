@@ -34,6 +34,7 @@ pub struct Configuration {
 }
 
 #[derive(Serialize, Deserialize,Debug)]
+#[serde(rename_all = "PascalCase")]
 pub struct Position {
     pub x: f32,
     pub y: f32,
