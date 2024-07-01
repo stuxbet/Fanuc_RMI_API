@@ -1,37 +1,35 @@
 use serde::{Deserialize, Serialize};
+use crate::FrameData;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct FrcSetUFrameUTool {
+pub struct FrcWriteUToolData {
+    #[serde(rename = "ToolNumber")]
+    tool_number: i8,    
+    #[serde(rename = "Frame")]
+    frame: FrameData,
     #[serde(rename = "Group")]
     group: u8,
-    #[serde(rename = "UFrameNumber")]
-    uframe_number: u8,
-    #[serde(rename = "UToolNumber")]
-    utool_number: u8,
 }
 
 
-impl FrcSetUFrameUTool{
-    fn new(groupentered: Option<u8>, tool_num: u8, frame_num: u8 ) -> Self {
+impl FrcWriteUToolData{
+    fn new(groupentered: Option<u8>, toolnum:i8, framespecs:FrameData) -> Self {
         Self {
             group: match groupentered {
                 Some(gm) => gm,
                 None => 1
             },
-            utool_number: tool_num,
-            uframe_number: frame_num
+            tool_number: toolnum,
+            frame: framespecs
         }
 
     }
 }
 
-
 #[derive(Serialize, Deserialize, Debug)]
-pub struct FrcSetUFrameUToolResponse { 
-
+pub struct FrcWriteUToolDataResponse { 
     #[serde(rename = "ErrorID")]
     pub error_id: u32,
     #[serde(rename = "Group")]
-    pub group: u16,
-
+    group: u8,
 }

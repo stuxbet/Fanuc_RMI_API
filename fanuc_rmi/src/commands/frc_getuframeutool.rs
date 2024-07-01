@@ -1,25 +1,19 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct FrcSetUFrameUTool {
+pub struct FrcGetUFrameUTool {
     #[serde(rename = "Group")]
     group: u8,
-    #[serde(rename = "UFrameNumber")]
-    uframe_number: u8,
-    #[serde(rename = "UToolNumber")]
-    utool_number: u8,
 }
 
 
-impl FrcSetUFrameUTool{
-    fn new(groupentered: Option<u8>, tool_num: u8, frame_num: u8 ) -> Self {
+impl FrcGetUFrameUTool{
+    fn new(groupentered: Option<u8>) -> Self {
         Self {
             group: match groupentered {
                 Some(gm) => gm,
                 None => 1
             },
-            utool_number: tool_num,
-            uframe_number: frame_num
         }
 
     }
@@ -27,8 +21,11 @@ impl FrcSetUFrameUTool{
 
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct FrcSetUFrameUToolResponse { 
-
+pub struct FrcGetUFrameUToolResponse { 
+    #[serde(rename = "UFrameNumber")]
+    uframe_number: u8,
+    #[serde(rename = "UToolNumber")]
+    utool_number: u8,
     #[serde(rename = "ErrorID")]
     pub error_id: u32,
     #[serde(rename = "Group")]

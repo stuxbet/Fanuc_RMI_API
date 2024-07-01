@@ -7,6 +7,18 @@ mod frc_setuframeutool;
 mod frc_getstatus;
 mod frc_readuframedata;
 mod frc_writeuframedata;
+mod frc_readutooldata;
+mod frc_writeutooldata;
+mod frc_readdin;
+mod frc_writedout;
+mod frc_readcartesianposition;
+mod frc_readjointangles;
+mod frc_setoveride;
+mod frc_getuframeutool;
+mod frc_readpositionregister;
+mod frc_writepositionregister;
+mod frc_reset;
+mod frc_readtcpspeed;
 
 pub use frc_initialize::*;
 pub use frc_readerror::*;
@@ -17,5 +29,17 @@ pub use frc_setuframeutool::*;
 pub use frc_getstatus::*;
 pub use frc_readuframedata::*;
 pub use frc_writeuframedata::*;
+pub use frc_readutooldata::*;
+pub use frc_writeutooldata::*;
+pub use frc_readdin::*;
+pub use frc_writedout::*;
+pub use frc_readcartesianposition::*;
+pub use frc_readjointangles::*;
+pub use frc_setoveride::*;
+pub use frc_getuframeutool::*;
+pub use frc_readpositionregister::*;
+pub use frc_writepositionregister::*;
+pub use frc_reset::*;
+pub use frc_readtcpspeed::*;
 
 

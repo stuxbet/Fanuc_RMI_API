@@ -46,6 +46,19 @@ pub struct Position {
     pub ext3: Option<f32>,
 }
 
+#[derive(Serialize, Deserialize,Debug)]
+pub struct JointAngles {
+    j1: f32,
+    j2: f32,
+    j3: f32,
+    j4: f32,
+    j5: f32,
+    j6: f32,
+    j7: f32,
+    j8: f32,
+    j9: f32,
+}
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TermType {
