@@ -2,19 +2,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FrcReadError {
-    Count: u8,
+    #[serde(rename = "Count")]
+    count: u8,
 }
 
 
 
 impl FrcReadError{
-    fn new(count: Option<u8>) -> Self {
-        let count = match count {
+    fn new(count1: Option<u8>) -> Self {
+        let count1 = match count1 {
             Some(gm) => gm,
             None => 1
         };
         Self {
-            Count: count
+            count: count1
         }
 
     }
