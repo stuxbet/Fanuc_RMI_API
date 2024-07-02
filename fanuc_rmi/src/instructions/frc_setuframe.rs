@@ -11,6 +11,7 @@ pub struct FrcSetUFrame {
 
  
 impl FrcSetUFrame{
+    #[allow(unused)]
     fn new(seq:i32, frame_num:u8) -> Self {
         Self {
             sequence_id: seq,

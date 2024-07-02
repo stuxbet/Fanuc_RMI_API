@@ -11,6 +11,7 @@ pub struct FrcSetUTool {
 
  
 impl FrcSetUTool{
+    #[allow(unused)]
     fn new(seq:i32, tool_num:u8) -> Self {
         Self {
             sequence_id: seq,

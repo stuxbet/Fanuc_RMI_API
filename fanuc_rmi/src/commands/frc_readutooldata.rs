@@ -11,6 +11,7 @@ pub struct FrcReadUToolData {
 
 
 impl FrcReadUToolData{
+    #[allow(unused)]
     fn new(groupentered: Option<u8>, framenum:i8) -> Self {
         Self {
             group: match groupentered {

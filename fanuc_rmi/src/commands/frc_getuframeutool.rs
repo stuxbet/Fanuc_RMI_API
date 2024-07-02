@@ -8,6 +8,7 @@ pub struct FrcGetUFrameUTool {
 
 
 impl FrcGetUFrameUTool{
+    #[allow(unused)]
     fn new(groupentered: Option<u8>) -> Self {
         Self {
             group: match groupentered {

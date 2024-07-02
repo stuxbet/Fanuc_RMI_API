@@ -11,6 +11,8 @@ pub struct FrcSetPayLoad {
 
  
 impl FrcSetPayLoad{
+    #[allow(unused)]
+
     fn new(seq:i32, schedule_num:u8) -> Self {
         Self {
             sequence_id: seq,

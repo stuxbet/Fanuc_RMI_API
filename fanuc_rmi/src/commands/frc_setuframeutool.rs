@@ -12,6 +12,7 @@ pub struct FrcSetUFrameUTool {
 
 
 impl FrcSetUFrameUTool{
+    #[allow(unused)]
     fn new(groupentered: Option<u8>, tool_num: u8, frame_num: u8 ) -> Self {
         Self {
             group: match groupentered {

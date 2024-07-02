@@ -11,6 +11,7 @@ pub struct FrcCall {
 
  
 impl FrcCall{
+    #[allow(unused)]
     fn new(seq:i32, program:String) -> Self {
         Self {
             sequence_id: seq,

@@ -9,6 +9,7 @@ pub struct FrcReadCartesianPosition {
 
 
 impl FrcReadCartesianPosition{
+    #[allow(unused)]
     fn new(groupentered: Option<u8>, ) -> Self {
         Self {
             group: match groupentered {

@@ -11,6 +11,7 @@ pub struct FrcWaitTime {
 
  
 impl FrcWaitTime{
+    #[allow(unused)]
     fn new(seq:i32, time:f32) -> Self {
         Self {
             sequence_id: seq,

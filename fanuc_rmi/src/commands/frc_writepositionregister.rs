@@ -16,6 +16,7 @@ pub struct FrcWritePositionRegister {
 
 
 impl FrcWritePositionRegister{
+    #[allow(unused)]
     fn new(groupentered: Option<u8>, register:u16, config:Configuration , pos:Position) -> Self {
         Self {
             group: match groupentered {

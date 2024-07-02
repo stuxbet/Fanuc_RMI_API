@@ -10,6 +10,7 @@ pub struct FrcWriteDOUT{
 
 
 impl FrcWriteDOUT{
+    #[allow(unused)]
     fn new(port_num: u16,port_val: u8) -> Self {
         Self {
             port_number: port_num,

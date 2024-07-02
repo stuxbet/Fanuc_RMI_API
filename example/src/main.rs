@@ -1,5 +1,5 @@
 use fanuc_rmi::drivers::FanucDriver;
-use fanuc_rmi::{Configuration, FrameData, Position};
+use fanuc_rmi::{Configuration, Position};
 use std::error::Error;
 
 #[tokio::main]
@@ -11,6 +11,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(_) => println!("Connected successfully"),
         Err(e) => println!("Failed to connect: {}", e),
     }
+    driver.get_status().await?;
     driver.initialize().await?;
     driver.linear_motion(
         1,    

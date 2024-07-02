@@ -13,6 +13,7 @@ pub struct FrcWriteUFrameData {
 
 
 impl FrcWriteUFrameData{
+    #[allow(unused)]
     fn new(groupentered: Option<u8>, framenum:i8, framespecs:FrameData) -> Self {
         Self {
             group: match groupentered {

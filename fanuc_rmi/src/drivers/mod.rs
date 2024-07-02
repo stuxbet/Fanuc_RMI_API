@@ -5,7 +5,7 @@ use tokio::{io::AsyncWriteExt, io::AsyncReadExt, net::TcpStream, sync::Mutex, ti
 use crate::packets::*;
 use crate::instructions::*;
 use crate::commands::*;
-use crate::{Configuration, FrameData, Position, SpeedType, TermType};
+use crate::{Configuration, Position, SpeedType, TermType};
 
 pub struct FanucDriver {
     addr: String,
@@ -97,8 +97,23 @@ impl FanucDriver {
         }
         Ok(())
     }
+    pub async fn get_status(&self) -> Result<(), Box<dyn Error>> {
 
-    pub async fn disconnect(&self) -> Result<(), Box<dyn Error>> {
+        let packet = Command::FrcGetStatus {};
+        
+        let packet = serde_json::to_string(&packet).expect("FrcGetStatus packet didnt serialize") + "\r\n";
+
+        let response = self.send::<CommandResponse>(packet).await?;
+        if let CommandResponse::FrcGetStatus(ref res) = response {
+            if res.error_id != 0 {
+                println!("Error ID: {}", res.error_id);
+                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a FrcGetStatus return packet", res.error_id))));
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn disconnect(&mut self) -> Result<(), Box<dyn Error>> {
 
         let packet = Communication::FrcDisconnect {};
         
@@ -111,6 +126,8 @@ impl FanucDriver {
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a Disconect packet", res.error_id))));
             }
         }
+        self.close_connection();
+
         Ok(())
 
     }

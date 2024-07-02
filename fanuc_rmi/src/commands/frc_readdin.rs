@@ -8,6 +8,7 @@ pub struct FrcReadDIN{
 
 
 impl FrcReadDIN{
+    #[allow(unused)]
     fn new(port: u16) -> Self {
         Self {
             port_num: port
