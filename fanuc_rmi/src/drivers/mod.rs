@@ -2,8 +2,10 @@ use serde::Deserialize;
 use std::{error::Error, io, sync::Arc, time::Duration};
 use tokio::{io::AsyncWriteExt, io::AsyncReadExt, net::TcpStream, sync::Mutex, time::sleep};
 
-use crate::{commands::FrcInitialize, packets::*};
-
+use crate::packets::*;
+use crate::instructions::*;
+use crate::commands::*;
+use crate::{Configuration, FrameData, Position, SpeedType, TermType};
 
 pub struct FanucDriver {
     addr: String,
@@ -75,7 +77,76 @@ impl FanucDriver {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a initialization packet", res.error_id))));
-                // Err(format!("Fanuc threw a Error #{} on a initialization packet", res.error_id).into());
+            }
+        }
+        Ok(())
+
+    }
+    pub async fn abort(&self) -> Result<(), Box<dyn Error>> {
+
+        let packet = Command::FrcAbort {};
+        
+        let packet = serde_json::to_string(&packet).expect("Abort packet didnt serialize") + "\r\n";
+
+        let response = self.send::<CommandResponse>(packet).await?;
+        if let CommandResponse::FrcAbort(ref res) = response {
+            if res.error_id != 0 {
+                println!("Error ID: {}", res.error_id);
+                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a abort packet", res.error_id))));
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn disconnect(&self) -> Result<(), Box<dyn Error>> {
+
+        let packet = Communication::FrcDisconnect {};
+        
+        let packet = serde_json::to_string(&packet).expect("Disconnect packet didnt serialize") + "\r\n";
+
+        let response = self.send::<CommunicationResponse>(packet).await?;
+        if let CommunicationResponse::FrcDisconnect(ref res) = response {
+            if res.error_id != 0 {
+                println!("Error ID: {}", res.error_id);
+                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a Disconect packet", res.error_id))));
+            }
+        }
+        Ok(())
+
+    }
+
+    //this need to be updated and need clearification on location and config input
+    pub async fn linear_motion(
+        &self,
+        sequenceid: u32,    
+        config: Configuration,
+        pos: Position,
+        speed_t: SpeedType,
+        speed: u16,
+        term_t: TermType,
+        term_va: u8,
+    
+    ) -> Result<(), Box<dyn Error>> {
+        // Create a connection packet
+        let packet = Instruction::FrcLinearMotion(FrcLinearMotion::new(
+            sequenceid,    
+            config,
+            pos,
+            speed_t,
+            speed,
+            term_t,
+            term_va,
+
+        ));
+        
+        let packet = serde_json::to_string(&packet).expect("Disconnect packet didnt serialize") + "\r\n";
+
+        // Send a connection request packet to start the handshake
+        let response = self.send::<CommunicationResponse>(packet).await?;
+        if let CommunicationResponse::FrcDisconnect(ref res) = response {
+            if res.error_id != 0 {
+                println!("Error ID: {}", res.error_id);
+                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a Disconect packet", res.error_id))));
             }
         }
         Ok(())

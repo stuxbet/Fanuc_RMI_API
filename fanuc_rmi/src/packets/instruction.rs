@@ -7,35 +7,97 @@ use crate::instructions::*;
 pub enum Instruction {
     #[serde(rename = "FRC_WaitDIN")]
     FrcWaitDIN(FrcWaitDIN),            // Wait for DIN Instruction
+
     #[serde(rename = "FRC_SetUFrame")]
-    FrcSetUFrame,          // Set User Frame Instruction
+    FrcSetUFrame(FrcSetUFrame),          // Set User Frame Instruction
+
     #[serde(rename = "FRC_SetUTool")]
-    FrcSetUTool,           // Set User Tool Instruction
+    FrcSetUTool(FrcSetUTool),           // Set User Tool Instruction
+    
     #[serde(rename = "FRC_WaitTime")]
-    FrcWaitTime,           // Add Wait Time Instruction
+    FrcWaitTime(FrcWaitTime),           // Add Wait Time Instruction
+
     #[serde(rename = "FRC_SetPayLoad")]
-    FrcSetPayLoad,         // Set Payload Instruction
+    FrcSetPayLoad(FrcSetPayLoad),         // Set Payload Instruction
+
     #[serde(rename = "FRC_Call")]
-    FrcCall,               // Call a Program
+    FrcCall(FrcCall),               // Call a Program
+
     #[serde(rename = "FRC_LinearMotion")]
-    FrcLinearMotion,       // Add Linear Motion Instruction
+    FrcLinearMotion(FrcLinearMotion),       // Add Linear Motion Instruction
+
     #[serde(rename = "FRC_LinearRelative")]
-    FrcLinearRelative,     // Add Linear Incremental Motion Instruction
+    FrcLinearRelative(FrcLinearRelative),     // Add Linear Incremental Motion Instruction
+
+    #[serde(rename = "FRC_LinearRelativeJRep")]
+    FrcLinearRelativeJRep(FrcLinearRelativeJRep),     // Add Linear Relative Motion with Joint Representation
+
     #[serde(rename = "FRC_JointMotion")]
-    FrcJointMotion,        // Add Joint Motion Instruction
+    FrcJointMotion(FrcJointMotion),        // Add Joint Motion Instruction
+
     #[serde(rename = "FRC_JointRelative")]
-    FrcJointRelative,      // Add Joint Incremental Motion Instruction
+    FrcJointRelative(FrcJointRelative),      // Add Joint Incremental Motion Instruction
+
     #[serde(rename = "FRC_CircularMotion")]
-    FrcCircularMotion,     // Add Circular Motion Instruction
+    FrcCircularMotion(FrcCircularMotion),     // Add Circular Motion Instruction
+
     #[serde(rename = "FRC_CircularRelative")]
-    FrcCircularRelative,   // Add Circular Incremental Motion Instruction
+    FrcCircularRelative(FrcCircularRelative),   // Add Circular Incremental Motion Instruction
+
     #[serde(rename = "FRC_JointMotionJRep")]
-    FrcJointMotionJRep,    // Add Joint Motion with Joint Representation
+    FrcJointMotionJRep(FrcJointMotionJRep),    // Add Joint Motion with Joint Representation
+
     #[serde(rename = "FRC_JointRelativeJRep")]
-    FrcJointRelativeJRep,  // Add Joint Incremental Motion with Joint Representation
+    FrcJointRelativeJRep(FrcJointRelativeJRep),  // Add Joint Incremental Motion with Joint Representation
+
     #[serde(rename = "FRC_LinearMotionJRep")]
-    FrcLinearMotionJRep,   // Add Linear Motion with Joint Representation
+    FrcLinearMotionJRep(FrcLinearMotionJRep),   // Add Linear Motion with Joint Representation
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "Instruction")]
+pub enum InstructionResponse {
+    #[serde(rename = "FRC_WaitDIN")]
+    FrcWaitDIN(FrcWaitDINResponse),
+    #[serde(rename = "FRC_SetUFrame")]
+    FrcSetUFrame(FrcSetUFrameResponse),
+    #[serde(rename = "FRC_SetUTool")]
+    FrcSetUTool(FrcSetUToolResponse),
+    #[serde(rename = "FRC_WaitTime")]
+    FrcWaitTime(FrcWaitTimeResponse),
+    #[serde(rename = "FRC_SetPayLoad")]
+    FrcSetPayLoad(FrcSetPayLoadResponse),
+    #[serde(rename = "FRC_Call")]
+    FrcCall(FrcCallResponse),
+    #[serde(rename = "FRC_LinearMotion")]
+    FrcLinearMotion(FrcLinearMotionResponse), 
+    #[serde(rename = "FRC_LinearRelative")]
+    FrcLinearRelative(FrcLinearRelativeResponse),
+    #[serde(rename = "FRC_LinearRelativeJRep")]
+    FrcLinearRelativeJRep(FrcLinearRelativeJRepResponse),  
+    #[serde(rename = "FRC_JointMotion")]
+    FrcJointMotion(FrcJointMotionResponse),  
+    #[serde(rename = "FRC_JointRelative")]
+    FrcJointRelative(FrcJointRelativeResponse),  
+    #[serde(rename = "FRC_CircularMotion")]
+    FrcCircularMotion(FrcCircularMotionResponse), 
+    #[serde(rename = "FRC_CircularRelative")]
+    FrcCircularRelative(FrcCircularRelativeResponse), 
+    #[serde(rename = "FRC_JointMotionJRep")]
+    FrcJointMotionJRep(FrcJointMotionJRepResponse),   
+    #[serde(rename = "FRC_JointRelativeJRep")]
+    FrcJointRelativeJRep(FrcJointRelativeJRepResponse),
+    #[serde(rename = "FRC_LinearMotionJRep")]
+    FrcLinearMotionJRep(FrcLinearMotionJRepResponse), 
+
+
+}
+
+
+
+
+
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum OnOff{

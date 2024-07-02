@@ -42,9 +42,9 @@ pub struct Position {
     pub w: f32,
     pub p: f32,
     pub r: f32,
-    pub ext1: Option<f32>,
-    pub ext2: Option<f32>,
-    pub ext3: Option<f32>,
+    pub ext1: f32,
+    pub ext2: f32,
+    pub ext3: f32,
 }
 
 #[derive(Serialize, Deserialize,Debug)]
