@@ -1,9 +1,12 @@
 use std::{error::Error, fmt};
 
+use packets::Communication;
+use packets::Command;
+use packets::Instruction;
+
 use serde::{Deserialize, Serialize};
 
-pub mod packet_functions;
-mod packet_defs;
+
 pub mod packets;
 pub mod drivers;
 pub mod instructions;
@@ -112,4 +115,11 @@ impl fmt::Display for FrcError {
             FrcError::FanucErrorCode(ref errorid) => write!(f, "fanuc returned  error#: {}", errorid),
         }
     }
+}
+
+#[derive(Debug)]
+pub enum PacketEnum {
+    Communication(Communication),
+    Command(Command),
+    Instruction(Instruction)
 }

@@ -1,5 +1,5 @@
 use fanuc_rmi::drivers::FanucDriver;
-use fanuc_rmi::{Configuration, Position};
+// use fanuc_rmi::{Configuration, Position};
 use std::error::Error;
 
 #[tokio::main]
@@ -42,8 +42,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //     20,
     //     fanuc_rmi::TermType::CNT,
     //     1,
-        
     // ).await?;
+
     // driver.linear_motion(
     //     2,    
     //     Configuration {
