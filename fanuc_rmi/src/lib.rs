@@ -118,6 +118,8 @@ impl fmt::Display for FrcError {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(untagged)]
+
 pub enum PacketEnum {
     Communication(Communication),
     Command(Command),

@@ -101,15 +101,21 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
                 "Command": "FRC_Abort",
                 "ErrorID": 0,
             }),
-            Some("FRC_Disconnect") => json!({
-                "Status": "Disconnected"
-            }),
             _ => json!({}),
         };
         response_json = match request_json["Communication"].as_str() {
             Some("FRC_Disconnect") => json!({
-                "Communication": "FRC_Disconnect",
+                "Command": "FRC_Disconnect",
                 "ErrorID": 0,
+
+            }),
+            _ => response_json
+        };
+        response_json = match request_json["Instruction"].as_str() {
+            Some("FRC_LinearMotion") => json!({
+                "Instruction": "FRC_LinearMotion",
+                "ErrorID": 0,
+                "SequenceID": 1,
 
             }),
             _ => response_json

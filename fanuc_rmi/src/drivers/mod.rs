@@ -349,13 +349,12 @@ impl FanucDriver {
     
         // Clone the ready flag for the producer
         let producer_ready_flag = Arc::clone(&consumer_ready_flag);
-    
 
         let producer = task::spawn({
             let tx = tx.clone();
             let producer_ready_flag = Arc::clone(&producer_ready_flag);
             async move {
-                for i in 0..10 {
+                for i in 0..7 {
                     // Wait until the consumer is ready for the next command
                     {
                         let mut ready = producer_ready_flag.lock().await;
@@ -364,13 +363,13 @@ impl FanucDriver {
                         }
                         *ready = false; // Mark as not ready
                     }
-    
+                    println!("queue is :{}", queue.len() );
                     // Create a mock command
                     let command = format!("Command {}", i).into_bytes();
     
-                    println!("I evengot here cuh");
                     // Send the command to the channel
                     let packet = serde_json::to_string(&queue.pop_front().unwrap()).unwrap();
+                    println!("deserialized to  :{}", packet );
 
 
                     let command = packet.into_bytes();
@@ -382,7 +381,6 @@ impl FanucDriver {
             }
         });
     
-
 
         // Spawn a consumer task
         let consumer = task::spawn({
@@ -410,7 +408,7 @@ impl FanucDriver {
                         }
                         Ok(n) => {
                             let response = &buffer[..n];
-                            println!("Received: {:?}", String::from_utf8_lossy(response));
+                            println!("Received on consumer: {:?}", String::from_utf8_lossy(response));
                         }
                         Err(e) => {
                             println!("Failed to read response: {}", e);
