@@ -83,8 +83,8 @@ impl FanucDriver {
         if let CommandResponse::FrcInitialize(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
-                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a initialization packet", res.error_id))));
-                // return Err(FrcError::FanucErrorCode(res.error_id));
+                // return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a initialization packet", res.error_id))));
+                return Err(Box::new(FrcError::FanucErrorCode(res.error_id)));
             }
         }
         Ok(())
