@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::{error::Error, io, sync::Arc, time::Duration};
 use tokio::{io::AsyncWriteExt, io::AsyncReadExt, net::TcpStream, sync::Mutex, time::sleep};
+// use std::collections::VecDeque;
+
 
 use crate::packets::*;
 use crate::instructions::*;
@@ -12,6 +14,8 @@ pub struct FanucDriver {
     initialize_port: u32,
     connection_port: Option<String>,
     tcp_stream: Option<Arc<Mutex<TcpStream>>>,
+    // packet_queue: VecDeque<i32>
+
 }
 
 impl FanucDriver {
@@ -21,6 +25,7 @@ impl FanucDriver {
             initialize_port,
             connection_port: None,
             tcp_stream: None,
+            
         }
     }
 
@@ -33,11 +38,14 @@ impl FanucDriver {
         // Create a connection packet
         let packet = Communication::FrcConnect {};
         
-        let packet = serde_json::to_string(&packet).unwrap() + "\r\n";
-
+        let packet = match serde_json::to_string(&packet) {
+            Ok(serialized_packet) => serialized_packet + "\r\n",
+            Err(_) => return Err(Box::new(FrcError::Serialization("Communication: Connect packet didnt serialize correctly".to_string()))),
+        };
         // Send a connection request packet to start the handshake
         let response = self.send::<CommunicationResponse>(packet).await?;
 
+        //FIXME: this should prob have a defined behavior to handle not getting a port number back
         self.connection_port = match response {
             CommunicationResponse::FrcConnect(res) => Some(res.port_number.to_string()),
             _ => None,
@@ -68,17 +76,14 @@ impl FanucDriver {
 
 
     pub async fn initialize(&self) -> Result<(), Box<dyn Error>> {
-        // Create a connection packet
+
         let packet = Command::FrcInitialize(FrcInitialize::default());
         
-        // let packet = serde_json::to_string(&packet).expect("Initalize packet didnt serialize") + "\r\n";
-
         let packet = match serde_json::to_string(&packet) {
             Ok(serialized_packet) => serialized_packet + "\r\n",
             Err(_) => return Err(Box::new(FrcError::Serialization("Initalize packet didnt serialize correctly".to_string()))),
         };
 
-        // Send a connection request packet to start the handshake
         let response = self.send::<CommandResponse>(packet).await?;
         if let CommandResponse::FrcInitialize(ref res) = response {
             if res.error_id != 0 {
@@ -97,7 +102,11 @@ impl FanucDriver {
 
         let packet = Command::FrcAbort {};
         
-        let packet = serde_json::to_string(&packet).expect("Abort packet didnt serialize") + "\r\n";
+        let packet = match serde_json::to_string(&packet) {
+            Ok(serialized_packet) => serialized_packet + "\r\n",
+            Err(_) => return Err(Box::new(FrcError::Serialization("Abort packet didnt serialize correctly".to_string()))),
+        };
+
 
         let response = self.send::<CommandResponse>(packet).await?;
         if let CommandResponse::FrcAbort(ref res) = response {
@@ -108,11 +117,15 @@ impl FanucDriver {
         }
         Ok(())
     }
+
     pub async fn get_status(&self) -> Result<(), Box<dyn Error>> {
 
         let packet = Command::FrcGetStatus {};
         
-        let packet = serde_json::to_string(&packet).expect("FrcGetStatus packet didnt serialize") + "\r\n";
+        let packet = match serde_json::to_string(&packet) {
+            Ok(serialized_packet) => serialized_packet + "\r\n",
+            Err(_) => return Err(Box::new(FrcError::Serialization("get_status packet didnt serialize correctly".to_string()))),
+        };
 
         let response = self.send::<CommandResponse>(packet).await?;
         if let CommandResponse::FrcGetStatus(ref res) = response {
@@ -128,7 +141,10 @@ impl FanucDriver {
 
         let packet = Communication::FrcDisconnect {};
         
-        let packet = serde_json::to_string(&packet).expect("Disconnect packet didnt serialize") + "\r\n";
+        let packet = match serde_json::to_string(&packet) {
+            Ok(serialized_packet) => serialized_packet + "\r\n",
+            Err(_) => return Err(Box::new(FrcError::Serialization("Disconnect packet didnt serialize correctly".to_string()))),
+        };
 
         let response = self.send::<CommunicationResponse>(packet).await?;
         if let CommunicationResponse::FrcDisconnect(ref res) = response {
@@ -166,7 +182,10 @@ impl FanucDriver {
 
         ));
         
-        let packet = serde_json::to_string(&packet).expect("Disconnect packet didnt serialize") + "\r\n";
+        let packet = match serde_json::to_string(&packet) {
+            Ok(serialized_packet) => serialized_packet + "\r\n",
+            Err(_) => return Err(Box::new(FrcError::Serialization("linear motion packet didnt serialize correctly".to_string()))),
+        };
 
         let response = self.send::<CommunicationResponse>(packet).await?;
         if let CommunicationResponse::FrcDisconnect(ref res) = response {
@@ -186,7 +205,7 @@ impl FanucDriver {
         match &self.tcp_stream {
             Some(stream) => {
                 let mut stream = stream.lock().await;
-                // let packet = serde_json::to_string(&packet).unwrap() + "\r\n";
+
                 stream.write_all(packet.as_bytes()).await?;
                 println!("Sent: {}", packet);
 
