@@ -1,3 +1,5 @@
+use std::{error::Error, fmt};
+
 use serde::{Deserialize, Serialize};
 
 pub mod packet_functions;
@@ -88,4 +90,26 @@ pub enum SpeedType {
     Time, // Time in 0.1 second increments.
     #[serde(rename = "mSec")]
     MilliSeconds, // Time in milliseconds (0.001 seconds).
+}
+
+#[derive(Debug)]
+pub enum FrcError{
+    Serialization(String),
+    UnrecognizedPacket,
+    FanucErrorCode(u32),
+
+}
+impl Error for FrcError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+impl fmt::Display for FrcError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            FrcError::Serialization(ref msg) => write!(f, "Serialization error: {}", msg),
+            FrcError::UnrecognizedPacket => write!(f, "Fanuc threw a unrecognized "),
+            FrcError::FanucErrorCode(ref errorid) => write!(f, "fanuc returned  error#: {}", errorid),
+        }
+    }
 }

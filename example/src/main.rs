@@ -7,6 +7,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // let mut driver = FanucDriver::default();
     let mut driver = FanucDriver::new("192.168.1.100".to_string(), 16001);
+
     match driver.connect().await {
         Ok(_) => println!("Connected successfully"),
         Err(e) => println!("Failed to connect: {}", e),
@@ -38,13 +39,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ext3: 0.0,
         },
         fanuc_rmi::SpeedType::MMSec,
-        100,
+        20,
         fanuc_rmi::TermType::CNT,
         1,
         
     ).await?;
     driver.linear_motion(
-        1,    
+        2,    
         Configuration {
             u_tool_number: 1,
             u_frame_number: 1,
@@ -68,15 +69,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
             ext3: 0.0,
         },
         fanuc_rmi::SpeedType::MMSec,
-        100,
+        20,
         fanuc_rmi::TermType::CNT,
         1,
         
     ).await?;
     driver.abort().await?;
     driver.disconnect().await?;
-    
-
 
     Ok(())
 }

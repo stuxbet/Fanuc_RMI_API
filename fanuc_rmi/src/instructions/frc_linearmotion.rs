@@ -17,6 +17,7 @@ pub struct FrcLinearMotion {
     term_type: TermType,
     #[serde(rename = "TermValue")]
     term_value: u8,
+
 }
 
 

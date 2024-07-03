@@ -5,7 +5,7 @@ use tokio::{io::AsyncWriteExt, io::AsyncReadExt, net::TcpStream, sync::Mutex, ti
 use crate::packets::*;
 use crate::instructions::*;
 use crate::commands::*;
-use crate::{Configuration, Position, SpeedType, TermType};
+use crate::{Configuration, Position, SpeedType, TermType, FrcError};
 
 pub struct FanucDriver {
     addr: String,
@@ -65,11 +65,18 @@ impl FanucDriver {
         self.tcp_stream = None;
     }
 
+
+
     pub async fn initialize(&self) -> Result<(), Box<dyn Error>> {
         // Create a connection packet
         let packet = Command::FrcInitialize(FrcInitialize::default());
         
-        let packet = serde_json::to_string(&packet).expect("Initalize packet didnt serialize") + "\r\n";
+        // let packet = serde_json::to_string(&packet).expect("Initalize packet didnt serialize") + "\r\n";
+
+        let packet = match serde_json::to_string(&packet) {
+            Ok(serialized_packet) => serialized_packet + "\r\n",
+            Err(_) => return Err(Box::new(FrcError::Serialization("Initalize packet didnt serialize correctly".to_string()))),
+        };
 
         // Send a connection request packet to start the handshake
         let response = self.send::<CommandResponse>(packet).await?;
@@ -77,11 +84,15 @@ impl FanucDriver {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a initialization packet", res.error_id))));
+                // return Err(FrcError::FanucErrorCode(res.error_id));
             }
         }
         Ok(())
 
     }
+    
+    
+    
     pub async fn abort(&self) -> Result<(), Box<dyn Error>> {
 
         let packet = Command::FrcAbort {};
@@ -142,9 +153,8 @@ impl FanucDriver {
         speed: u16,
         term_t: TermType,
         term_va: u8,
-    
+
     ) -> Result<(), Box<dyn Error>> {
-        // Create a connection packet
         let packet = Instruction::FrcLinearMotion(FrcLinearMotion::new(
             sequenceid,    
             config,
@@ -158,12 +168,11 @@ impl FanucDriver {
         
         let packet = serde_json::to_string(&packet).expect("Disconnect packet didnt serialize") + "\r\n";
 
-        // Send a connection request packet to start the handshake
         let response = self.send::<CommunicationResponse>(packet).await?;
         if let CommunicationResponse::FrcDisconnect(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
-                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a Disconect packet", res.error_id))));
+                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a linear motion on return packet", res.error_id))));
             }
         }
         Ok(())
