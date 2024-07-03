@@ -4,6 +4,7 @@ use crate::instructions::*;
 
 
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "Instruction")]
 pub enum Instruction {
     #[serde(rename = "FRC_WaitDIN")]
     FrcWaitDIN(FrcWaitDIN),            // Wait for DIN Instruction

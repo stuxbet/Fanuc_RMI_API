@@ -14,6 +14,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     // driver.get_status().await?;
     driver.initialize().await?;
+    driver.start_proccess().await?;
     // driver.linear_motion(
     //     1,    
     //     Configuration {

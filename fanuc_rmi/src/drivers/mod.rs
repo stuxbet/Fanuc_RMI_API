@@ -243,7 +243,8 @@ impl FanucDriver {
     async fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, Box<dyn Error>> {
         //here is where we will convert the gcode to the packets we need and return a queue
 
-        
+        //apply math magic to generate g code here
+
 
         let mut queue: VecDeque<PacketEnum> = VecDeque::new();
         queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearMotion(FrcLinearMotion::new(
@@ -312,8 +313,8 @@ impl FanucDriver {
 
     }
 
-
-    pub async fn start_proccess(&self, gcode:VecDeque<PacketEnum>) -> Result<(), Box<dyn Error>> {
+// FIXME: not done yet just geting the structure down
+    pub async fn start_proccess(&self) -> Result<(), Box<dyn Error>> {
         //my vision is that you will call the start proccess function and feed it a input and it will start a queue of instructions and send and handle the request
 
         //implement a queue of packets and send them and get a response, using the buffer on the controllor
@@ -322,22 +323,26 @@ impl FanucDriver {
 
         //dequeues here still have a O(1)access and removal so it just give us more functionality
 
-        // sections:
-        // 1. load gcode into the queue
-        // 2. start a proccess to 
-
 
         let mut sequencenum:u32 = 1;
 
-        let mut queue = self.load_gcode().await?;
-
+        let mut queue: VecDeque<PacketEnum> = self.load_gcode().await?;
 
 
         let (tx, mut rx) = mpsc::channel(32);
 
         // Create a shared TCP stream wrapped in an Arc<Mutex<TcpStream>>
-        let addr = "127.0.0.1:12345"; // Replace with your address
-        let tcp_stream = Arc::new(Mutex::new(TcpStream::connect(addr).await?));
+
+        let tcp_stream = match &self.tcp_stream {
+            Some(stream) => Arc::clone(stream),
+            None => {
+                return Err(Box::new(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Cannot send without initializing an open TCP stream",
+                )));
+            }
+        };
+        // let tcp_stream = self.tcp_stream;
     
         // Create a shared flag to indicate when the consumer is ready for the next command
         let consumer_ready_flag = Arc::new(Mutex::new(true));
@@ -346,101 +351,92 @@ impl FanucDriver {
         let producer_ready_flag = Arc::clone(&consumer_ready_flag);
     
 
-        match &self.tcp_stream {
-            Some(stream) => {
+        let producer = task::spawn({
+            let tx = tx.clone();
+            let producer_ready_flag = Arc::clone(&producer_ready_flag);
+            async move {
+                for i in 0..10 {
+                    // Wait until the consumer is ready for the next command
+                    {
+                        let mut ready = producer_ready_flag.lock().await;
+                        while !*ready {
+                            tokio::task::yield_now().await;
+                        }
+                        *ready = false; // Mark as not ready
+                    }
+    
+                    // Create a mock command
+                    let command = format!("Command {}", i).into_bytes();
+    
+                    println!("I evengot here cuh");
+                    // Send the command to the channel
+                    let packet = serde_json::to_string(&queue.pop_front().unwrap()).unwrap();
 
-                let producer = task::spawn({
-                    let tx = tx.clone();
-                    let producer_ready_flag = Arc::clone(&producer_ready_flag);
-                    async move {
-                        for i in 0..10 {
-                            // Wait until the consumer is ready for the next command
-                            {
-                                let mut ready = producer_ready_flag.lock().await;
-                                while !*ready {
-                                    tokio::task::yield_now().await;
-                                }
-                                *ready = false; // Mark as not ready
-                            }
-            
-                            // Create a mock command
-                            let command = format!("Command {}", i).into_bytes();
-            
-                            // Send the command to the channel
-                            if tx.send(command).await.is_err() {
-                                println!("Receiver dropped");
-                                return;
-                            }
+
+                    let command = packet.into_bytes();
+                    if tx.send(command).await.is_err() {
+                        println!("Receiver dropped");
+                        return;
+                    }
+                }
+            }
+        });
+    
+
+
+        // Spawn a consumer task
+        let consumer = task::spawn({
+            let tcp_stream= Arc::clone(&tcp_stream);
+
+            let consumer_ready_flag = Arc::clone(&consumer_ready_flag);
+            async move {
+                while let Some(command) = rx.recv().await {
+                    let mut stream = tcp_stream.lock().await;
+    
+                    // Write the command to the TCP stream
+                    if let Err(e) = stream.write_all(&command).await {
+                        println!("Failed to send command: {}", e);
+                        continue;
+                    } else {
+                        println!("Sent: {:?}", String::from_utf8_lossy(&command));
+                    }
+    
+                    // Read the response from the TCP stream
+                    let mut buffer = vec![0; 1024];
+                    match stream.read(&mut buffer).await {
+                        Ok(n) if n == 0 => {
+                            println!("Connection closed by server");
+                            break;
+                        }
+                        Ok(n) => {
+                            let response = &buffer[..n];
+                            println!("Received: {:?}", String::from_utf8_lossy(response));
+                        }
+                        Err(e) => {
+                            println!("Failed to read response: {}", e);
+                            break;
                         }
                     }
-                });
-            
-                // Spawn a consumer task
-                let consumer = task::spawn({
-                    let tcp_stream = Arc::clone(&tcp_stream);
-                    let consumer_ready_flag = Arc::clone(&consumer_ready_flag);
-                    async move {
-                        while let Some(command) = rx.recv().await {
-                            let mut stream = tcp_stream.lock().await;
-            
-                            // Write the command to the TCP stream
-                            if let Err(e) = stream.write_all(&command).await {
-                                println!("Failed to send command: {}", e);
-                                continue;
-                            } else {
-                                println!("Sent: {:?}", String::from_utf8_lossy(&command));
-                            }
-            
-                            // Read the response from the TCP stream
-                            let mut buffer = vec![0; 1024];
-                            match stream.read(&mut buffer).await {
-                                Ok(n) if n == 0 => {
-                                    println!("Connection closed by server");
-                                    break;
-                                }
-                                Ok(n) => {
-                                    let response = &buffer[..n];
-                                    println!("Received: {:?}", String::from_utf8_lossy(response));
-                                }
-                                Err(e) => {
-                                    println!("Failed to read response: {}", e);
-                                    break;
-                                }
-                            }
-            
-                            // Mark the consumer as ready for the next command
-                            {
-                                let mut ready = consumer_ready_flag.lock().await;
-                                *ready = true;
-                            }
-                        }
+    
+                    // Mark the consumer as ready for the next command
+                    {
+                        let mut ready = consumer_ready_flag.lock().await;
+                        *ready = true;
                     }
-                });
+                }
+            }
+        });
+    
+        // Wait for both tasks to complete
+        producer.await.unwrap();
+        consumer.await.unwrap();
             
-                // Wait for both tasks to complete
-                producer.await.unwrap();
-                consumer.await.unwrap();
-
-
-            },
-            
-            None => {return Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot send without initializing an open TCP stream")));}
-        }
 
 
 
         Ok(())
 
     }
-
-
-
-
-
-
-
-
-
 
 }
 

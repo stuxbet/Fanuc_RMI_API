@@ -95,7 +95,7 @@ pub enum SpeedType {
     MilliSeconds, // Time in milliseconds (0.001 seconds).
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum FrcError{
     Serialization(String),
     UnrecognizedPacket,
@@ -117,7 +117,7 @@ impl fmt::Display for FrcError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum PacketEnum {
     Communication(Communication),
     Command(Command),
