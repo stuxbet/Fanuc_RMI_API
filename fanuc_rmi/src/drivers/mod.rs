@@ -163,7 +163,7 @@ impl FanucDriver {
     }
 
     //this need to be updated and need clearification on location and config input
-    pub async fn linear_motion(
+    pub async fn linear_relative(
         &self,
         sequenceid: u32,    
         config: Configuration,
@@ -174,7 +174,7 @@ impl FanucDriver {
         term_va: u8,
 
     ) -> Result<(), Box<dyn Error>> {
-        let packet = Instruction::FrcLinearMotion(FrcLinearMotion::new(
+        let packet = Instruction::FrcLinearRelative(FrcLinearRelative::new(
             sequenceid,    
             config,
             pos,
@@ -190,8 +190,8 @@ impl FanucDriver {
             Err(_) => return Err(Box::new(FrcError::Serialization("linear motion packet didnt serialize correctly".to_string()))),
         };
 
-        let response = self.send::<CommunicationResponse>(packet).await?;
-        if let CommunicationResponse::FrcDisconnect(ref res) = response {
+        let response = self.send::<InstructionResponse>(packet).await?;
+        if let InstructionResponse::FrcLinearRelative(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a linear motion on return packet", res.error_id))));
@@ -209,8 +209,8 @@ impl FanucDriver {
             Some(stream) => {
                 let mut stream = stream.lock().await;
 
-                stream.write_all(packet.as_bytes()).await?;
-                println!("Sent: {}", packet);
+                stream.write(packet.as_bytes()).await?;
+                // println!("Sent: {}", packet);
 
                 // Read response
                 let mut buffer = vec![0; 2048];
@@ -221,7 +221,7 @@ impl FanucDriver {
 
                 let response = String::from_utf8_lossy(&buffer[..n]);
                 
-                println!("Received: {}", response);
+                println!("Sent: {}\nReceived: {}", &packet, &response);
 
                 // Parse JSON response
                 match serde_json::from_str::<T>(&response) {
@@ -307,7 +307,64 @@ impl FanucDriver {
         TermType::CNT,
         1,
         ))));
-
+        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearMotion(FrcLinearMotion::new(
+            3,    
+        Configuration {
+            u_tool_number: 1,
+            u_frame_number: 1,
+            front: 1,
+            up: 1,
+            left: 1,
+            glip: 1,
+            turn4: 1,
+            turn5: 1,
+            turn6: 1,
+        },
+        Position {
+            x: 0.0,
+            y: 100.0,
+            z: 0.0,
+            w: 0.0,
+            p: 0.0,
+            r: 0.0,
+            ext1: 0.0,
+            ext2: 0.0,
+            ext3: 0.0,
+        },
+        SpeedType::MMSec,
+        20,
+        TermType::CNT,
+        1,
+        ))));
+        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearMotion(FrcLinearMotion::new(
+            4,    
+        Configuration {
+            u_tool_number: 1,
+            u_frame_number: 1,
+            front: 1,
+            up: 1,
+            left: 1,
+            glip: 1,
+            turn4: 1,
+            turn5: 1,
+            turn6: 1,
+        },
+        Position {
+            x: 0.0,
+            y: 100.0,
+            z: 0.0,
+            w: 0.0,
+            p: 0.0,
+            r: 0.0,
+            ext1: 0.0,
+            ext2: 0.0,
+            ext3: 0.0,
+        },
+        SpeedType::MMSec,
+        20,
+        TermType::CNT,
+        1,
+        ))));
         Ok(queue)
         
 
@@ -334,7 +391,7 @@ impl FanucDriver {
         // Create a shared TCP stream wrapped in an Arc<Mutex<TcpStream>>
 
         let tcp_stream = match &self.tcp_stream {
-            Some(stream) => Arc::clone(stream),
+            Some(stream) => stream,
             None => {
                 return Err(Box::new(io::Error::new(
                     io::ErrorKind::NotConnected,
@@ -343,12 +400,18 @@ impl FanucDriver {
             }
         };
         // let tcp_stream = self.tcp_stream;
+        let mut stream = tcp_stream.clone();
+        let mut stream = stream.lock().await;
+        // Split the TcpStream into a read half and a write half
+        let (mut reader, mut writer) = tokio::io::split(&mut *stream);
+
+        
+
     
-        // Create a shared flag to indicate when the consumer is ready for the next command
         let consumer_ready_flag = Arc::new(Mutex::new(true));
-    
-        // Clone the ready flag for the producer
         let producer_ready_flag = Arc::clone(&consumer_ready_flag);
+
+
 
         let producer = task::spawn({
             let tx = tx.clone();
@@ -361,18 +424,19 @@ impl FanucDriver {
                         while !*ready {
                             tokio::task::yield_now().await;
                         }
-                        *ready = false; // Mark as not ready
+                        *ready = true; // Mark as not ready
                     }
                     println!("queue is :{}", queue.len() );
                     // Create a mock command
                     let command = format!("Command {}", i).into_bytes();
     
                     // Send the command to the channel
-                    let packet = serde_json::to_string(&queue.pop_front().unwrap()).unwrap();
+                    let packet = queue.pop_front().unwrap();
+                    let packet = serde_json::to_string(&packet).unwrap();
                     println!("deserialized to  :{}", packet );
-
-
+                    //somewhere past here it is adding forward slashes and fuckling up the system
                     let command = packet.into_bytes();
+
                     if tx.send(command).await.is_err() {
                         println!("Receiver dropped");
                         return;
@@ -417,9 +481,14 @@ impl FanucDriver {
                     }
     
                     // Mark the consumer as ready for the next command
+                    println!("Consumer processed command, marking as ready");
                     {
+                        // println!("ready!!!");
+
                         let mut ready = consumer_ready_flag.lock().await;
                         *ready = true;
+                        // println!("ready!!!");
+
                     }
                 }
             }
@@ -427,7 +496,7 @@ impl FanucDriver {
     
         // Wait for both tasks to complete
         producer.await.unwrap();
-        consumer.await.unwrap();
+        // consumer.await.unwrap();
             
 
 
