@@ -118,6 +118,12 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
                 "SequenceID": 1,
 
             }),
+            Some("FRC_LinearRelative") => json!({
+                "Instruction": "FRC_LinearRelative",
+                "ErrorID": 0,
+                "SequenceID": 1,
+
+            }),
             _ => response_json
         };
 

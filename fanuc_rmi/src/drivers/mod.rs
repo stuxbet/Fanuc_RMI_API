@@ -17,6 +17,9 @@ pub struct FanucDriver {
     initialize_port: u32,
     connection_port: Option<String>,
     tcp_stream: Option<Arc<Mutex<TcpStream>>>,
+
+
+
     // Instruction_packet_queue: VecDeque<i32>
 
 }
@@ -28,6 +31,7 @@ impl FanucDriver {
             initialize_port,
             connection_port: None,
             tcp_stream: None,
+            
             
         }
     }
@@ -240,7 +244,7 @@ impl FanucDriver {
         }
     }
 
-    async fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, Box<dyn Error>> {
+    fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, Box<dyn Error>> {
         //here is where we will convert the gcode to the packets we need and return a queue
 
         //apply math magic to generate g code here
@@ -276,7 +280,6 @@ impl FanucDriver {
                 TermType::FINE,
                 1,
         ))));
-
         queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearRelative(FrcLinearRelative::new(
             2,    
             Configuration {
@@ -370,75 +373,176 @@ impl FanucDriver {
 
     }
 
-pub async fn start_program(&mut self) -> Result<(), Box<dyn Error>> {
-    let mut sequence_num: u32 = 1;
-    let mut queue: VecDeque<PacketEnum> = self.load_gcode().await?;
+    pub async fn start_program(&self) -> Result<(), Box<dyn Error>> {
+        let mut sequence_num: u32 = 1;
+        let queue = self.load_gcode()?; // Handle synchronous load_gcode
 
-    match &self.tcp_stream {
-        Some(stream_arc) => {
-            let read_stream = stream_arc.clone();
-            let write_stream = stream_arc.clone();
-            println!("Got a TcpStream!");
+        match &self.tcp_stream {
+            Some(stream) => {
+                let write_stream = stream.clone();
+                let read_stream = stream.clone();
 
-            let write_task = task::spawn(async move {
-                let mut write_stream = write_stream.lock().await;
+                let write_task = task::spawn({
+                    // let write_half = Arc::clone(&write_half);
+                    async move {
+                        // let mut write_stream = write_half.lock().await;
+                        let mut stream = write_stream.lock().await;
+                        let (_reader, mut writer) = stream.split();
 
-                for packet in queue {
+                        for packet in queue {
+                            let packet = match serde_json::to_string(&packet) {
+                                Ok(serialized_packet) => serialized_packet + "\r\n",
+                                Err(e) => {
+                                    eprintln!("Failed to serialize a packet: {}", e);
+                                    break;
+                                }
+                            };
 
-                    let packet = match serde_json::to_string(&packet) {
-                        Ok(serialized_packet) => serialized_packet + "\r\n",
-                        Err(e) => {
-                            eprintln!("Failed to serialize a packet: {}", e);
-                            break;
-                        }
-                    };
-
-                    match write_stream.write_all(packet.as_bytes()).await {
-                        Ok(_) => println!("Sent message"),
-                        Err(e) => {
-                            eprintln!("Failed to write to stream: {}", e);
-                            break;
-                        }
-                    }
-                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // Simulate periodic writes
-                }
-            });
-
-            let read_task = task::spawn(async move {
-                let mut read_stream = read_stream.lock().await;
-                let mut buffer = [0u8; 1024];
-                loop {
-                    match read_stream.read(&mut buffer).await {
-                        Ok(0) => break, // Connection closed
-                        Ok(n) => {
-                            println!("Read {} bytes: {:?}", n, &buffer[..n]);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to read from stream: {}", e);
-                            break;
+                            match writer.write_all(packet.as_bytes()).await {
+                                Ok(_) => println!("Sent message: {}", packet),
+                                Err(e) => {
+                                    eprintln!("Failed to write to stream: {}", e);
+                                    break;
+                                }
+                            }
+                            tokio::time::sleep(Duration::from_secs(1)).await; // Simulate periodic writes
                         }
                     }
+                });
+
+                let read_task = task::spawn({
+                    // let read_half = Arc::clone(&read_half);
+                    async move {
+                        let mut stream = read_stream.lock().await;
+                        let (mut reader, _writer) = stream.split();
+
+                        // let mut read_stream = read_half.lock().await;
+                        let mut buffer = vec![0; 2048];
+                        loop {
+                            match reader.read(&mut buffer).await {
+                                Ok(0) => break, // Connection closed
+                                Ok(n) => {
+                                    let response = String::from_utf8_lossy(&buffer[..n]);
+                                    println!("Received {}", response);
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to read from stream: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Wait for both tasks to complete and handle potential errors
+                if let Err(e) = tokio::try_join!(read_task, write_task) {
+                    eprintln!("Error in tasks: {}", e);
                 }
-            });
-
-
-            // Wait for both tasks to complete and handle potential errors
-            if let Err(e) = tokio::try_join!(read_task, write_task) {
-                eprintln!("Error in tasks: {}", e);
+                println!("Both tasks completed");
+                
             }
-            println!("Both tasks completed");
+            None => {
+                println!("No TcpStream available.");
+                return Err(Box::new(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Cannot start program without initializing an open TCP stream",
+                )));
+            }
+            
+  
         }
-        None => {
-            println!("No TcpStream available.");
-            return Err(Box::new(io::Error::new(
-                io::ErrorKind::NotConnected,
-                "Cannot start program without initializing an open TCP stream",
-            )));
-        }
-    }
+        // if let Some(ref stream) = self.tcp_stream {
+        //     let stream = stream.lock().await;
+        //     let (mut reader, mut writer) = stream.into_split();
 
-    Ok(())
-}
+        // }
+
+        // let stream = self.tcp_stream.clone();
+        // match stream {
+        //     Some(stream_arc) => {
+        //         println!("got here1");
+
+        //         let stream_clone = stream_arc.clone();
+        //         let mut stream = stream_arc.lock().await;
+        //         // let stream = stream_clone.lock().await;
+        //         // let cloned_stream = stream_clone.clone();
+                
+
+        //         let (mut read_half, mut write_half) = TcpStream::into_split(*stream.clone());
+
+        //         // let (mut read_half, mut write_half) = stream.split();
+
+        //         // let (read_half, write_half) = TcpStream::into_split( *stream);
+
+        //         // let read_half = Arc::new(Mutex::new(read_half));
+        //         // let write_half = Arc::new(Mutex::new(write_half));
+        //         println!("got here2");
+                
+        //         let write_task = task::spawn({
+        //             // let write_half = Arc::clone(&write_half);
+        //             async move {
+        //                 // let mut write_stream = write_half.lock().await;
+
+        //                 for packet in queue {
+        //                     let packet = match serde_json::to_string(&packet) {
+        //                         Ok(serialized_packet) => serialized_packet + "\r\n",
+        //                         Err(e) => {
+        //                             eprintln!("Failed to serialize a packet: {}", e);
+        //                             break;
+        //                         }
+        //                     };
+
+        //                     match write_half.write_all(packet.as_bytes()).await {
+        //                         Ok(_) => println!("Sent message: {}", packet),
+        //                         Err(e) => {
+        //                             eprintln!("Failed to write to stream: {}", e);
+        //                             break;
+        //                         }
+        //                     }
+        //                     tokio::time::sleep(Duration::from_secs(1)).await; // Simulate periodic writes
+        //                 }
+        //             }
+        //         });
+
+        //         let read_task = task::spawn({
+        //             // let read_half = Arc::clone(&read_half);
+        //             async move {
+        //                 // let mut read_stream = read_half.lock().await;
+        //                 let mut buffer = vec![0; 2048];
+        //                 loop {
+        //                     match read_half.read(&mut buffer).await {
+        //                         Ok(0) => break, // Connection closed
+        //                         Ok(n) => {
+        //                             let response = String::from_utf8_lossy(&buffer[..n]);
+        //                             println!("Received {}", response);
+        //                         }
+        //                         Err(e) => {
+        //                             eprintln!("Failed to read from stream: {}", e);
+        //                             break;
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         });
+
+        //         // Wait for both tasks to complete and handle potential errors
+        //         if let Err(e) = tokio::try_join!(read_task, write_task) {
+        //             eprintln!("Error in tasks: {}", e);
+        //         }
+        //         println!("Both tasks completed");
+                
+        //     }
+        //     None => {
+        //         println!("No TcpStream available.");
+        //         return Err(Box::new(io::Error::new(
+        //             io::ErrorKind::NotConnected,
+        //             "Cannot start program without initializing an open TCP stream",
+        //         )));
+        //     }
+        // }
+
+        Ok(())
+    }
 
 }
 
