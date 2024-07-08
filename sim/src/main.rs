@@ -105,7 +105,7 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
         };
         response_json = match request_json["Communication"].as_str() {
             Some("FRC_Disconnect") => json!({
-                "Command": "FRC_Disconnect",
+                "Communication": "FRC_Disconnect",
                 "ErrorID": 0,
 
             }),

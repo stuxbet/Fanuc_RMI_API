@@ -1,8 +1,7 @@
 use serde::Deserialize;
-use tokio::sync::mpsc;
-use tokio::task;
+use serde::Serialize;
 use std::{error::Error, io, sync::Arc, time::Duration};
-use tokio::{io::AsyncWriteExt, io::AsyncReadExt, net::TcpStream, sync::Mutex, time::sleep};
+use tokio::{io::AsyncWriteExt, io::AsyncReadExt, io::split, net::TcpStream, sync::Mutex, time::sleep};
 use std::collections::VecDeque;
 
 
@@ -247,258 +246,198 @@ impl FanucDriver {
 
 
         let mut queue: VecDeque<PacketEnum> = VecDeque::new();
-        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearMotion(FrcLinearMotion::new(
+        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearRelative(FrcLinearRelative::new(
             1,    
-        Configuration {
-            u_tool_number: 1,
-            u_frame_number: 1,
-            front: 1,
-            up: 1,
-            left: 1,
-            glip: 1,
-            turn4: 1,
-            turn5: 1,
-            turn6: 1,
-        },
-        Position {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-            w: 0.0,
-            p: 0.0,
-            r: 0.0,
-            ext1: 0.0,
-            ext2: 0.0,
-            ext3: 0.0,
-        },
-        SpeedType::MMSec,
-        20,
-        TermType::CNT,
-        1,
-
+                Configuration {
+                    u_tool_number: 1,
+                    u_frame_number: 1,
+                    front: 1,
+                    up: 1,
+                    left: 1,
+                    glip: 1,
+                    turn4: 1,
+                    turn5: 1,
+                    turn6: 1,
+                },
+                Position {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 100.0,
+                    w: 0.0,
+                    p: 0.0,
+                    r: 0.0,
+                    ext1: 0.0,
+                    ext2: 0.0,
+                    ext3: 0.0,
+                },
+                SpeedType::MMSec,
+                30,
+                TermType::FINE,
+                1,
         ))));
 
-        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearMotion(FrcLinearMotion::new(
+        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearRelative(FrcLinearRelative::new(
             2,    
-        Configuration {
-            u_tool_number: 1,
-            u_frame_number: 1,
-            front: 1,
-            up: 1,
-            left: 1,
-            glip: 1,
-            turn4: 1,
-            turn5: 1,
-            turn6: 1,
-        },
-        Position {
-            x: 0.0,
-            y: 100.0,
-            z: 0.0,
-            w: 0.0,
-            p: 0.0,
-            r: 0.0,
-            ext1: 0.0,
-            ext2: 0.0,
-            ext3: 0.0,
-        },
-        SpeedType::MMSec,
-        20,
-        TermType::CNT,
-        1,
+            Configuration {
+                u_tool_number: 1,
+                u_frame_number: 1,
+                front: 1,
+                up: 1,
+                left: 1,
+                glip: 1,
+                turn4: 1,
+                turn5: 1,
+                turn6: 1,
+            },
+            Position {
+                x: 30.0,
+                y: 100.0,
+                z: 0.0,
+                w: 0.0,
+                p: 0.0,
+                r: 0.0,
+                ext1: 0.0,
+                ext2: 0.0,
+                ext3: 0.0,
+            },
+            SpeedType::MMSec,
+            30,
+            TermType::FINE,
+            1,
         ))));
-        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearMotion(FrcLinearMotion::new(
-            3,    
-        Configuration {
-            u_tool_number: 1,
-            u_frame_number: 1,
-            front: 1,
-            up: 1,
-            left: 1,
-            glip: 1,
-            turn4: 1,
-            turn5: 1,
-            turn6: 1,
-        },
-        Position {
-            x: 0.0,
-            y: 100.0,
-            z: 0.0,
-            w: 0.0,
-            p: 0.0,
-            r: 0.0,
-            ext1: 0.0,
-            ext2: 0.0,
-            ext3: 0.0,
-        },
-        SpeedType::MMSec,
-        20,
-        TermType::CNT,
-        1,
+        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearRelative(FrcLinearRelative::new(
+                3,    
+                Configuration {
+                    u_tool_number: 1,
+                    u_frame_number: 1,
+                    front: 1,
+                    up: 1,
+                    left: 1,
+                    glip: 1,
+                    turn4: 1,
+                    turn5: 1,
+                    turn6: 1,
+                },
+                Position {
+                    x: 0.0,
+                    y: 0.0,
+                    z: -100.0,
+                    w: 0.0,
+                    p: 0.0,
+                    r: 0.0,
+                    ext1: 0.0,
+                    ext2: 0.0,
+                    ext3: 0.0,
+                },
+                SpeedType::MMSec,
+                30,
+                TermType::FINE,
+                1,
         ))));
-        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearMotion(FrcLinearMotion::new(
-            4,    
-        Configuration {
-            u_tool_number: 1,
-            u_frame_number: 1,
-            front: 1,
-            up: 1,
-            left: 1,
-            glip: 1,
-            turn4: 1,
-            turn5: 1,
-            turn6: 1,
-        },
-        Position {
-            x: 0.0,
-            y: 100.0,
-            z: 0.0,
-            w: 0.0,
-            p: 0.0,
-            r: 0.0,
-            ext1: 0.0,
-            ext2: 0.0,
-            ext3: 0.0,
-        },
-        SpeedType::MMSec,
-        20,
-        TermType::CNT,
-        1,
+        queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearRelative(FrcLinearRelative::new(
+                4,    
+                Configuration {
+                    u_tool_number: 1,
+                    u_frame_number: 1,
+                    front: 1,
+                    up: 1,
+                    left: 1,
+                    glip: 1,
+                    turn4: 1,
+                    turn5: 1,
+                    turn6: 1,
+                },
+                Position {
+                    x: -30.0,
+                    y: -100.0,
+                    z: 0.0,
+                    w: 0.0,
+                    p: 0.0,
+                    r: 0.0,
+                    ext1: 0.0,
+                    ext2: 0.0,
+                    ext3: 0.0,
+                },
+                SpeedType::MMSec,
+                30,
+                TermType::FINE,
+                1,
         ))));
         Ok(queue)
-        
+
+
 
     }
 
 // FIXME: not done yet just geting the structure down
-    pub async fn start_proccess(&self) -> Result<(), Box<dyn Error>> {
-        //my vision is that you will call the start proccess function and feed it a input and it will start a queue of instructions and send and handle the request
-
-        //implement a queue of packets and send them and get a response, using the buffer on the controllor
-        
-        //this function will be async so that just sits off to the side and handles the robot
-
-        //dequeues here still have a O(1)access and removal so it just give us more functionality
-
+    pub async fn start_proccess(&mut self) -> Result<(), Box<dyn Error>> {
 
         let mut sequencenum:u32 = 1;
 
         let mut queue: VecDeque<PacketEnum> = self.load_gcode().await?;
 
+        match &self.tcp_stream {
+            Some(stream_arc) => {
+                println!("Got a TcpStream!");
+                // self.tcp_stream.lock();
+                let mut stream = stream_arc.lock().await;
+                let (mut reader, mut writer) = split(&mut *stream);
+                // let queue_clone = &queue;
 
-        let (tx, mut rx) = mpsc::channel(32);
+                let send_task = tokio::spawn(async move {
+                    println!("Task 1 is running");
+                    for packet in queue.iter() {
+                        // let packet = packet.serialize().unwrap();
 
-        // Create a shared TCP stream wrapped in an Arc<Mutex<TcpStream>>
+                        let packet = serde_json::to_string(&packet).unwrap();
+                        // stream.write(packet.as_bytes()).await;
 
-        let tcp_stream = match &self.tcp_stream {
-            Some(stream) => stream,
-            None => {
-                return Err(Box::new(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Cannot send without initializing an open TCP stream",
-                )));
-            }
-        };
-        // let tcp_stream = self.tcp_stream;
-        let mut stream = tcp_stream.clone();
-        let mut stream = stream.lock().await;
-        // Split the TcpStream into a read half and a write half
-        let (mut reader, mut writer) = tokio::io::split(&mut *stream);
-
-        
-
-    
-        let consumer_ready_flag = Arc::new(Mutex::new(true));
-        let producer_ready_flag = Arc::clone(&consumer_ready_flag);
-
-
-
-        let producer = task::spawn({
-            let tx = tx.clone();
-            let producer_ready_flag = Arc::clone(&producer_ready_flag);
-            async move {
-                for i in 0..7 {
-                    // Wait until the consumer is ready for the next command
-                    {
-                        let mut ready = producer_ready_flag.lock().await;
-                        while !*ready {
-                            tokio::task::yield_now().await;
-                        }
-                        *ready = true; // Mark as not ready
                     }
-                    println!("queue is :{}", queue.len() );
-                    // Create a mock command
-                    let command = format!("Command {}", i).into_bytes();
-    
-                    // Send the command to the channel
-                    let packet = queue.pop_front().unwrap();
-                    let packet = serde_json::to_string(&packet).unwrap();
-                    println!("deserialized to  :{}", packet );
-                    //somewhere past here it is adding forward slashes and fuckling up the system
-                    let command = packet.into_bytes();
 
-                    if tx.send(command).await.is_err() {
-                        println!("Receiver dropped");
-                        return;
+                    sleep(Duration::from_secs(1)).await;
+                    println!("Task 1 is done");
+                });
+            
+                let recieve_task = tokio::spawn(async {
+                    println!("Task 2 is running");
+                    sleep(Duration::from_secs(2)).await;
+                    println!("Task 2 is done");
+                    /*
+                    let mut buffer = vec![0; 2048];
+                    let n = stream.read(&mut buffer).await?;
+                    if n == 0 {
+                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Connection closed by peer")));
                     }
-                }
-            }
-        });
-    
 
-        // Spawn a consumer task
-        let consumer = task::spawn({
-            let tcp_stream= Arc::clone(&tcp_stream);
+                    let response = String::from_utf8_lossy(&buffer[..n]);
+                    
+                    println!("Sent: {}\nReceived: {}", &packet, &response);
 
-            let consumer_ready_flag = Arc::clone(&consumer_ready_flag);
-            async move {
-                while let Some(command) = rx.recv().await {
-                    let mut stream = tcp_stream.lock().await;
-    
-                    // Write the command to the TCP stream
-                    if let Err(e) = stream.write_all(&command).await {
-                        println!("Failed to send command: {}", e);
-                        continue;
-                    } else {
-                        println!("Sent: {:?}", String::from_utf8_lossy(&command));
-                    }
-    
-                    // Read the response from the TCP stream
-                    let mut buffer = vec![0; 1024];
-                    match stream.read(&mut buffer).await {
-                        Ok(n) if n == 0 => {
-                            println!("Connection closed by server");
-                            break;
-                        }
-                        Ok(n) => {
-                            let response = &buffer[..n];
-                            println!("Received on consumer: {:?}", String::from_utf8_lossy(response));
+                    // Parse JSON response
+                    match serde_json::from_str::<T>(&response) {
+                        Ok(response_packet) => {
+                            // Successfully parsed JSON into the generic type T
+                            Ok(response_packet)
                         }
                         Err(e) => {
-                            println!("Failed to read response: {}", e);
-                            break;
+                            // Failed to parse JSON
+                            println!("Could not parse response: {}", e);
+                            Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse response")))
                         }
                     }
-    
-                    // Mark the consumer as ready for the next command
-                    println!("Consumer processed command, marking as ready");
-                    {
-                        // println!("ready!!!");
-
-                        let mut ready = consumer_ready_flag.lock().await;
-                        *ready = true;
-                        // println!("ready!!!");
-
-                    }
-                }
-            }
-        });
-    
-        // Wait for both tasks to complete
-        producer.await.unwrap();
-        // consumer.await.unwrap();
+                     */
+                });
             
-
+                // Await both tasks to complete
+                let _ = tokio::join!(send_task, recieve_task);
+                println!("Both tasks completed");
+                
+            }
+            None => {
+                println!("No TcpStream available.");
+                return Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot Start Program without initializing an open TCP stream")))
+            }
+        }
 
 
         Ok(())
