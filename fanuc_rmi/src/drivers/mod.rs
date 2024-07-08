@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
+use tokio::task;
 use std::{error::Error, io, sync::Arc, time::Duration};
 use tokio::{io::AsyncWriteExt, io::AsyncReadExt, io::split, net::TcpStream, sync::Mutex, time::sleep};
 use std::collections::VecDeque;
@@ -369,80 +370,75 @@ impl FanucDriver {
 
     }
 
-// FIXME: not done yet just geting the structure down
-    pub async fn start_proccess(&mut self) -> Result<(), Box<dyn Error>> {
+pub async fn start_program(&mut self) -> Result<(), Box<dyn Error>> {
+    let mut sequence_num: u32 = 1;
+    let mut queue: VecDeque<PacketEnum> = self.load_gcode().await?;
 
-        let mut sequencenum:u32 = 1;
+    match &self.tcp_stream {
+        Some(stream_arc) => {
+            let read_stream = stream_arc.clone();
+            let write_stream = stream_arc.clone();
+            println!("Got a TcpStream!");
 
-        let mut queue: VecDeque<PacketEnum> = self.load_gcode().await?;
+            let write_task = task::spawn(async move {
+                let mut write_stream = write_stream.lock().await;
 
-        match &self.tcp_stream {
-            Some(stream_arc) => {
-                println!("Got a TcpStream!");
-                // self.tcp_stream.lock();
-                let mut stream = stream_arc.lock().await;
-                let (mut reader, mut writer) = split(&mut *stream);
-                // let queue_clone = &queue;
+                for packet in queue {
 
-                let send_task = tokio::spawn(async move {
-                    println!("Task 1 is running");
-                    for packet in queue.iter() {
-                        // let packet = packet.serialize().unwrap();
+                    let packet = match serde_json::to_string(&packet) {
+                        Ok(serialized_packet) => serialized_packet + "\r\n",
+                        Err(e) => {
+                            eprintln!("Failed to serialize a packet: {}", e);
+                            break;
+                        }
+                    };
 
-                        let packet = serde_json::to_string(&packet).unwrap();
-                        // stream.write(packet.as_bytes()).await;
-
+                    match write_stream.write_all(packet.as_bytes()).await {
+                        Ok(_) => println!("Sent message"),
+                        Err(e) => {
+                            eprintln!("Failed to write to stream: {}", e);
+                            break;
+                        }
                     }
+                    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await; // Simulate periodic writes
+                }
+            });
 
-                    sleep(Duration::from_secs(1)).await;
-                    println!("Task 1 is done");
-                });
-            
-                let recieve_task = tokio::spawn(async {
-                    println!("Task 2 is running");
-                    sleep(Duration::from_secs(2)).await;
-                    println!("Task 2 is done");
-                    /*
-                    let mut buffer = vec![0; 2048];
-                    let n = stream.read(&mut buffer).await?;
-                    if n == 0 {
-                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Connection closed by peer")));
-                    }
-
-                    let response = String::from_utf8_lossy(&buffer[..n]);
-                    
-                    println!("Sent: {}\nReceived: {}", &packet, &response);
-
-                    // Parse JSON response
-                    match serde_json::from_str::<T>(&response) {
-                        Ok(response_packet) => {
-                            // Successfully parsed JSON into the generic type T
-                            Ok(response_packet)
+            let read_task = task::spawn(async move {
+                let mut read_stream = read_stream.lock().await;
+                let mut buffer = [0u8; 1024];
+                loop {
+                    match read_stream.read(&mut buffer).await {
+                        Ok(0) => break, // Connection closed
+                        Ok(n) => {
+                            println!("Read {} bytes: {:?}", n, &buffer[..n]);
                         }
                         Err(e) => {
-                            // Failed to parse JSON
-                            println!("Could not parse response: {}", e);
-                            Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse response")))
+                            eprintln!("Failed to read from stream: {}", e);
+                            break;
                         }
                     }
-                     */
-                });
-            
-                // Await both tasks to complete
-                let _ = tokio::join!(send_task, recieve_task);
-                println!("Both tasks completed");
-                
+                }
+            });
+
+
+            // Wait for both tasks to complete and handle potential errors
+            if let Err(e) = tokio::try_join!(read_task, write_task) {
+                eprintln!("Error in tasks: {}", e);
             }
-            None => {
-                println!("No TcpStream available.");
-                return Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot Start Program without initializing an open TCP stream")))
-            }
+            println!("Both tasks completed");
         }
-
-
-        Ok(())
-
+        None => {
+            println!("No TcpStream available.");
+            return Err(Box::new(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Cannot start program without initializing an open TCP stream",
+            )));
+        }
     }
+
+    Ok(())
+}
 
 }
 

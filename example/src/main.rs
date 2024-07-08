@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         driver.initialize().await?;
     };
 
-    driver.start_proccess().await?;
+    driver.start_program().await?;
 
     // let dist:f32 = 100.0;
     // let speed: u16 = 31;
