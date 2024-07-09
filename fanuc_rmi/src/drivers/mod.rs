@@ -437,7 +437,7 @@ impl FanucDriver {
         match &self.write_half {
             Some(stream) => {
 
-                let mut writer = stream.lock().await;
+                // let mut writer = stream.lock().await;
 
                 while !queue.is_empty() {
                     let packet = queue.pop_front();
@@ -452,6 +452,7 @@ impl FanucDriver {
                         },
                         _ => 0, // Use a default value for non-instruction packets
                     };
+
                     tx.send(sequence_id).await.expect("Failed to send message");
 
                     let packet = match serde_json::to_string(&packet) {
@@ -461,16 +462,18 @@ impl FanucDriver {
                             break;
                         }
                     };
+                    println!("Got here 1");
+                    self.send_packet(packet).await?;
+                    println!("Got here 2");
 
-
-                    match writer.write_all(packet.as_bytes()).await {
-                        Ok(_) => println!("Sent message: {}", packet),
-                        Err(e) => {
-                            eprintln!("Failed to write to stream: {}", e);
-                            break;
-                        }
-                    }
-                    // sequence_num +=1 ;
+                    // match writer.write_all(packet.as_bytes()).await {
+                    //     Ok(_) => println!("Sent message: {}", packet),
+                    //     Err(e) => {
+                    //         eprintln!("Failed to write to stream: {}", e);
+                    //         break;
+                    //     }
+                    // }
+                
                     sleep(Duration::from_millis(1)).await;
                     
                 }
