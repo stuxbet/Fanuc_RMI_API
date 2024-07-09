@@ -2,7 +2,8 @@ use serde::Deserialize;
 use serde::Serialize;
 use tokio::task;
 use std::{error::Error, io, sync::Arc, time::Duration};
-use tokio::{io::AsyncWriteExt, io::AsyncReadExt, io::split, net::TcpStream, sync::Mutex, time::sleep};
+use tokio::{ net::TcpStream, sync::Mutex, time::sleep};
+use tokio::io::{ AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split};
 use std::collections::VecDeque;
 
 
@@ -17,10 +18,8 @@ pub struct FanucDriver {
     initialize_port: u32,
     connection_port: Option<String>,
     tcp_stream: Option<Arc<Mutex<TcpStream>>>,
-
-
-
-    // Instruction_packet_queue: VecDeque<i32>
+    write_half: Option<Arc<Mutex<WriteHalf<TcpStream>>>>,
+    read_half: Option<Arc<Mutex<ReadHalf<TcpStream>>>>
 
 }
 
@@ -31,7 +30,8 @@ impl FanucDriver {
             initialize_port,
             connection_port: None,
             tcp_stream: None,
-            
+            write_half: None,
+            read_half:None,
             
         }
     }
@@ -40,7 +40,13 @@ impl FanucDriver {
         let init_addr = format!("{}:{}", self.addr, self.initialize_port);
         let stream = connect_with_retries(&init_addr, 3).await?;
         println!("Connected to the server at {}", init_addr);
-        self.tcp_stream = Some(Arc::new(Mutex::new(stream)));
+        
+        let (read_half, write_half) = split(stream);
+
+        // Wrap the read and write halves in Arc<Mutex<>>
+        self.read_half = Some(Arc::new(Mutex::new(read_half)));
+        self.write_half = Some(Arc::new(Mutex::new(write_half)));
+
 
         // Create a connection packet
         let packet = Communication::FrcConnect {};
@@ -68,16 +74,30 @@ impl FanucDriver {
                 let new_addr = format!("{}:{}",&self.addr, port);
                 let stream = connect_with_retries(&new_addr, 3).await?;
                 println!("Connected to the secondary server at {}", new_addr);
-                self.tcp_stream = Some(Arc::new(Mutex::new(stream)));
+
+
+                let (read_half, write_half) = split(stream);
+
+                // Wrap the read and write halves in Arc<Mutex<>>
+                self.read_half = Some(Arc::new(Mutex::new(read_half)));
+                self.write_half = Some(Arc::new(Mutex::new(write_half)));
+
+                // self.tcp_stream = Some(Arc::new(Mutex::new(stream)));
+
+
+
             },
             None => {return Err(Box::new(io::Error::new(io::ErrorKind::InvalidData, "Port number is missing in the response")));}
         }
+
 
         Ok(())
     }
 
     pub fn close_connection(&mut self) {
         self.tcp_stream = None;
+        self.read_half = None;
+        self.write_half = None;
     }
 
 
@@ -209,15 +229,19 @@ impl FanucDriver {
     where
         T: for<'a> Deserialize<'a> + std::fmt::Debug,
     {
-        match &self.tcp_stream {
+        match &self.write_half {
             Some(stream) => {
                 let mut stream = stream.lock().await;
-
                 stream.write(packet.as_bytes()).await?;
                 // println!("Sent: {}", packet);
-
-                // Read response
+            }
+            None => return Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot send without a write stream"))),
+        }
+        match &self.read_half {
+            Some(stream) => {
                 let mut buffer = vec![0; 2048];
+                let mut stream = stream.lock().await;
+
                 let n = stream.read(&mut buffer).await?;
                 if n == 0 {
                     return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Connection closed by peer")));
@@ -239,9 +263,11 @@ impl FanucDriver {
                         Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse response")))
                     }
                 }
+
             }
-            None => Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot send without initializing an open TCP stream"))),
+            None => Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot send without a readstream"))),
         }
+
     }
 
     fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, Box<dyn Error>> {
