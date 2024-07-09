@@ -420,8 +420,18 @@ impl FanucDriver {
 
                     for index in 0..queue.len() {
                         let packet = queue.pop_front();
-                        //packet.sequenceid();
-                        tx.send(5).await.expect("Failed to send message");
+                        
+                        let sequence_id = match &packet.as_ref().unwrap() {
+                            PacketEnum::Instruction(instruction) => {
+                                match instruction {
+                                    Instruction::FrcLinearRelative(packet) => packet.sequence_id,
+                                    // Handle other instruction types similarly if needed
+                                    _ => 0, // Use a default value if sequence_id is not applicable
+                                }
+                            },
+                            _ => 0, // Use a default value for non-instruction packets
+                        };
+                        tx.send(sequence_id).await.expect("Failed to send message");
 
                         let packet = match serde_json::to_string(&packet) {
                             Ok(serialized_packet) => serialized_packet + "\r\n",
@@ -444,6 +454,7 @@ impl FanucDriver {
                         
                     }
                     println!("Sent all packets");
+                    tx.send(0).await.expect("Failed to send end message");
                     if queue.len() == 0 {break;}
                     
                 }
@@ -466,8 +477,9 @@ impl FanucDriver {
             Some(read_stream) => {
                 let mut reader = read_stream.lock().await;
 
-                // let mut read_stream = read_half.lock().await;
+                let mut numbers_to_look_for: VecDeque<u32> = VecDeque::new();
                 let mut buffer = vec![0; 2048];
+
                 loop {
                     tokio::select! {
                         result = reader.read(&mut buffer) => {
@@ -476,19 +488,39 @@ impl FanucDriver {
                                 Ok(n) => {
                                     let response = String::from_utf8_lossy(&buffer[..n]);
                                     println!("Received {}", response);
+
+                                    let request_json: serde_json::Value = serde_json::from_str(&response)?;
+
+                                    if let Some(id) = request_json.get("SequenceID") {
+                                        if let Some(id_num) = id.as_u64() {
+                                            let id_num: Result<u32, _> = id_num.try_into();
+                                            let id_num:u32 = id_num.unwrap();
+
+                                            if numbers_to_look_for.contains(&id_num) {
+                                                println!("Found matching id: {}", id_num);
+                                                // numbers_to_look_for.remove(&id_num);
+                                                numbers_to_look_for.retain(|&x| x != id_num);
+
+                                                println!("{:?}",numbers_to_look_for);
+                                            }
+                                        } else {
+                                            println!("The value for 'SequenceID' cannot be turned into a u64");
+                                        }
+                                    } else {
+                                        println!("Key 'SequenceID' not found");
+                                    }
+
                                 }
                                 Err(e) => {
                                     eprintln!("Failed to read from stream: {}", e);
-                                    break;
                                 }
                             }
                         },
                         Some(message) = rx.recv() => {
-                            println!("recieved on parse channel: {}",message);
-                            if message == 4 {
-                                break;
-                            }
+                            if message == 0 {break;}
+                            numbers_to_look_for.push_back(message);
                         }
+ 
                     }
                 }
             }

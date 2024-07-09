@@ -67,7 +67,7 @@ async fn handle_client(mut socket: TcpStream, new_port: Arc<Mutex<u16>>) -> Resu
 }
 async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Error + Send + Sync>> {
     // println!("Second client spawn");
-
+    let mut seq:u32 = 0;
     let mut buffer = vec![0; 1024];
     loop {
         let n = match socket.read(&mut buffer).await {
@@ -115,21 +115,21 @@ async fn handle_secondary_client(mut socket: TcpStream) -> Result<(), Box<dyn Er
             Some("FRC_LinearMotion") => json!({
                 "Instruction": "FRC_LinearMotion",
                 "ErrorID": 0,
-                "SequenceID": 1,
-
+                "SequenceID": seq,
             }),
             Some("FRC_LinearRelative") => json!({
                 "Instruction": "FRC_LinearRelative",
                 "ErrorID": 0,
-                "SequenceID": 1,
+                "SequenceID": seq,
 
             }),
-            _ => response_json
+            _ => response_json            
         };
 
         let response = serde_json::to_string(&response_json)? + "\r\n";
         socket.write_all(response.as_bytes()).await?;
         println!("Sent: {}", response);
+        seq += 1;
     }
 
     Ok(())
