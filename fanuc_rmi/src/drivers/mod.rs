@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
+use tokio::sync::mpsc;
 use tokio::task;
 use std::{error::Error, io, sync::Arc, time::Duration};
 use tokio::{ net::TcpStream, sync::Mutex, time::sleep};
@@ -396,27 +397,20 @@ impl FanucDriver {
     pub async fn start_program(&self) -> Result<(), Box<dyn Error>> {
         let mut sequence_num: u32 = 1;
         let mut queue = self.load_gcode()?; // Handle synchronous load_gcode
-        print!("before");
-        // let res = self.send_queue(&mut queue).await?;
-        print!("after");
+        let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 1
 
-        // let res = self.parse_path_responses();
+
         let (res1, res2) = tokio::join!(
-            self.send_queue(&mut queue),
-            self.parse_path_responses()
+            self.send_queue(&mut queue, tx),
+            self.parse_path_responses(rx)
         );
         res1?;
         res2?;
 
-        // if let Err(e) = tokio::try_join!(read_task, write_task) {
-        //     eprintln!("Error in tasks: {}", e);
-        // }
-        // println!("Both tasks completed");
-
         Ok(())
     }
 
-    async fn send_queue(&self, queue: &mut VecDeque<PacketEnum>)-> Result<(), Box<dyn Error>>{
+    async fn send_queue(&self, queue: &mut VecDeque<PacketEnum>, tx: mpsc::Sender<u32>)-> Result<(), Box<dyn Error>>{
 
         match &self.write_half {
             Some(stream) => {
@@ -426,6 +420,9 @@ impl FanucDriver {
 
                     for index in 0..queue.len() {
                         let packet = queue.pop_front();
+                        //packet.sequenceid();
+                        tx.send(5).await.expect("Failed to send message");
+
                         let packet = match serde_json::to_string(&packet) {
                             Ok(serialized_packet) => serialized_packet + "\r\n",
                             Err(e) => {
@@ -433,6 +430,7 @@ impl FanucDriver {
                                 break;
                             }
                         };
+
 
                         match writer.write_all(packet.as_bytes()).await {
                             Ok(_) => println!("Sent message: {}", packet),
@@ -463,7 +461,7 @@ impl FanucDriver {
     
     
     }
-    async fn parse_path_responses(&self)-> Result<(), Box<dyn Error>>{
+    async fn parse_path_responses(&self, mut rx: mpsc::Receiver<u32>)-> Result<(), Box<dyn Error>>{
         match &self.read_half {
             Some(read_stream) => {
                 let mut reader = read_stream.lock().await;
@@ -471,18 +469,27 @@ impl FanucDriver {
                 // let mut read_stream = read_half.lock().await;
                 let mut buffer = vec![0; 2048];
                 loop {
-                    match reader.read(&mut buffer).await {
-                        Ok(0) => break, // Connection closed
-                        Ok(n) => {
-                            let response = String::from_utf8_lossy(&buffer[..n]);
-                            println!("Received {}", response);
-                        }
-                        Err(e) => {
-                            eprintln!("Failed to read from stream: {}", e);
-                            break;
+                    tokio::select! {
+                        result = reader.read(&mut buffer) => {
+                            match result {
+                                Ok(0) => break, // Connection closed
+                                Ok(n) => {
+                                    let response = String::from_utf8_lossy(&buffer[..n]);
+                                    println!("Received {}", response);
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to read from stream: {}", e);
+                                    break;
+                                }
+                            }
+                        },
+                        Some(message) = rx.recv() => {
+                            println!("recieved on parse channel: {}",message);
+                            if message == 4 {
+                                break;
+                            }
                         }
                     }
-                    // if queue.len() == 0 {break;}
                 }
             }
             None => {

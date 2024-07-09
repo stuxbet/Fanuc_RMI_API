@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use std::{error::Error, fmt};
+use std::error::{self, Error};
+use std::fmt;
 
 use packets::Communication;
 use packets::Command;
