@@ -46,7 +46,6 @@ impl FanucDriver {
         self.read_half = Some(Arc::new(Mutex::new(read_half)));
         self.write_half = Some(Arc::new(Mutex::new(write_half)));
 
-
         // Create a connection packet
         let packet = Communication::FrcConnect {};
         
@@ -54,15 +53,16 @@ impl FanucDriver {
             Ok(serialized_packet) => serialized_packet + "\r\n",
             Err(_) => return Err(Box::new(FrcError::Serialization("Communication: Connect packet didnt serialize correctly".to_string()))),
         };
+
         // Send a connection request packet to start the handshake
-        let response = self.send::<CommunicationResponse>(packet).await?;
+        self.send_packet(packet.clone()).await?;
+        let response = self.recieve::<CommunicationResponse>(packet).await?;
 
         //FIXME: this should prob have a defined behavior to handle not getting a port number back
         self.connection_port = match response {
             CommunicationResponse::FrcConnect(res) => Some(res.port_number.to_string()),
             _ => None,
         };
-
 
         // Close the initial connection
         self.close_connection();
@@ -100,6 +100,7 @@ impl FanucDriver {
 
     pub async fn initialize(&self) -> Result<(), Box<dyn Error>> {
 
+
         let packet = Command::FrcInitialize(FrcInitialize::default());
         
         let packet = match serde_json::to_string(&packet) {
@@ -107,7 +108,10 @@ impl FanucDriver {
             Err(_) => return Err(Box::new(FrcError::Serialization("Initalize packet didnt serialize correctly".to_string()))),
         };
 
-        let response = self.send::<CommandResponse>(packet).await?;
+        self.send_packet(packet.clone()).await?;
+        let response = self.recieve::<CommandResponse>(packet).await?;
+
+
         if let CommandResponse::FrcInitialize(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -129,8 +133,9 @@ impl FanucDriver {
             Err(_) => return Err(Box::new(FrcError::Serialization("Abort packet didnt serialize correctly".to_string()))),
         };
 
+        self.send_packet(packet.clone()).await?;
+        let response = self.recieve::<CommandResponse>(packet).await?;
 
-        let response = self.send::<CommandResponse>(packet).await?;
         if let CommandResponse::FrcAbort(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -149,7 +154,8 @@ impl FanucDriver {
             Err(_) => return Err(Box::new(FrcError::Serialization("get_status packet didnt serialize correctly".to_string()))),
         };
 
-        let response = self.send::<CommandResponse>(packet).await?;
+        self.send_packet(packet.clone()).await?;
+        let response = self.recieve::<CommandResponse>(packet).await?;        
         if let CommandResponse::FrcGetStatus(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -168,7 +174,8 @@ impl FanucDriver {
             Err(_) => return Err(Box::new(FrcError::Serialization("Disconnect packet didnt serialize correctly".to_string()))),
         };
 
-        let response = self.send::<CommunicationResponse>(packet).await?;
+        self.send_packet(packet.clone()).await?;
+        let response = self.recieve::<CommunicationResponse>(packet).await?;        
         if let CommunicationResponse::FrcDisconnect(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -209,7 +216,8 @@ impl FanucDriver {
             Err(_) => return Err(Box::new(FrcError::Serialization("linear motion packet didnt serialize correctly".to_string()))),
         };
 
-        let response = self.send::<InstructionResponse>(packet).await?;
+        self.send_packet(packet.clone()).await?;
+        let response = self.recieve::<InstructionResponse>(packet).await?;
         if let InstructionResponse::FrcLinearRelative(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -220,20 +228,28 @@ impl FanucDriver {
 
     }
 
-    async fn send<T>(&self, packet: String) -> Result<T, Box<dyn Error>>
-    where
-        T: for<'a> Deserialize<'a> + std::fmt::Debug,
-    {
-        match &self.write_half {
-            Some(stream) => {
-                let mut stream = stream.lock().await;
-                stream.write(packet.as_bytes()).await?;
-                // println!("Sent: {}", packet);
-            }
-            None => return Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot send without a write stream"))),
+//new send and recieve abstractions to use on queue stystem to simplify
+    async fn send_packet(&self, packet: String) -> Result<(), Box<dyn Error>> {
+        if let Some(stream) = &self.write_half {
+            let mut stream = stream.lock().await;
+            stream.write_all(packet.as_bytes()).await?;
+            println!("Sent: {}", packet);
+            Ok(())
+        } else {
+            Err(Box::new(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "Cannot send without a write stream",
+            )))
         }
-        match &self.read_half {
-            Some(stream) => {
+        // recieve()
+    }
+
+
+    async fn recieve<T>(&self, packet: String) -> Result<T, Box<dyn Error>>
+        where
+            T: for<'a> Deserialize<'a> + std::fmt::Debug,
+        {
+            if let Some(stream) = &self.read_half {
                 let mut buffer = vec![0; 2048];
                 let mut stream = stream.lock().await;
 
@@ -243,27 +259,26 @@ impl FanucDriver {
                 }
 
                 let response = String::from_utf8_lossy(&buffer[..n]);
-                
                 println!("Sent: {}\nReceived: {}", &packet, &response);
 
                 // Parse JSON response
                 match serde_json::from_str::<T>(&response) {
-                    Ok(response_packet) => {
-                        // Successfully parsed JSON into the generic type T
-                        Ok(response_packet)
-                    }
+                    Ok(response_packet) => Ok(response_packet),
                     Err(e) => {
-                        // Failed to parse JSON
                         println!("Could not parse response: {}", e);
                         Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse response")))
                     }
                 }
-
+            } else {
+                Err(Box::new(io::Error::new(
+                    io::ErrorKind::NotConnected,
+                    "Cannot receive without a read stream",
+                )))
             }
-            None => Err(Box::new(io::Error::new(io::ErrorKind::NotConnected, "Cannot send without a readstream"))),
         }
 
-    }
+
+
 
     fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, Box<dyn Error>> {
         //here is where we will convert the gcode to the packets we need and return a queue
@@ -395,7 +410,7 @@ impl FanucDriver {
     }
 
     pub async fn start_program(&self) -> Result<(), Box<dyn Error>> {
-        let mut sequence_num: u32 = 1;
+        // let mut sequence_num: u32 = 1;
         let mut queue = self.load_gcode()?; // Handle synchronous load_gcode
         let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 1
 
@@ -404,8 +419,15 @@ impl FanucDriver {
             self.send_queue(&mut queue, tx),
             self.parse_path_responses(rx)
         );
-        res1?;
-        res2?;
+        match res1 {
+            Ok(_) => println!("send_queue completed successfully"),
+            Err(e) => eprintln!("send_queue failed: {}", e),
+        }
+    
+        match res2 {
+            Ok(_) => println!("parse_path_responses completed successfully"),
+            Err(e) => eprintln!("parse_path_responses failed: {}", e),
+        }
 
         Ok(())
     }
@@ -414,50 +436,48 @@ impl FanucDriver {
 
         match &self.write_half {
             Some(stream) => {
-                loop{
-                    // let mut write_stream = write_half.lock().await;
-                    let mut writer = stream.lock().await;
 
-                    for index in 0..queue.len() {
-                        let packet = queue.pop_front();
-                        
-                        let sequence_id = match &packet.as_ref().unwrap() {
-                            PacketEnum::Instruction(instruction) => {
-                                match instruction {
-                                    Instruction::FrcLinearRelative(packet) => packet.sequence_id,
-                                    // Handle other instruction types similarly if needed
-                                    _ => 0, // Use a default value if sequence_id is not applicable
-                                }
-                            },
-                            _ => 0, // Use a default value for non-instruction packets
-                        };
-                        tx.send(sequence_id).await.expect("Failed to send message");
+                let mut writer = stream.lock().await;
 
-                        let packet = match serde_json::to_string(&packet) {
-                            Ok(serialized_packet) => serialized_packet + "\r\n",
-                            Err(e) => {
-                                eprintln!("Failed to serialize a packet: {}", e);
-                                break;
+                while !queue.is_empty() {
+                    let packet = queue.pop_front();
+                    
+                    let sequence_id = match &packet.as_ref().unwrap() {
+                        PacketEnum::Instruction(instruction) => {
+                            match instruction {
+                                Instruction::FrcLinearRelative(packet) => packet.sequence_id,
+                                // Handle other instruction types similarly if needed
+                                _ => 0, // Use a default value if sequence_id is not applicable
                             }
-                        };
+                        },
+                        _ => 0, // Use a default value for non-instruction packets
+                    };
+                    tx.send(sequence_id).await.expect("Failed to send message");
 
-
-                        match writer.write_all(packet.as_bytes()).await {
-                            Ok(_) => println!("Sent message: {}", packet),
-                            Err(e) => {
-                                eprintln!("Failed to write to stream: {}", e);
-                                break;
-                            }
+                    let packet = match serde_json::to_string(&packet) {
+                        Ok(serialized_packet) => serialized_packet + "\r\n",
+                        Err(e) => {
+                            eprintln!("Failed to serialize a packet: {}", e);
+                            break;
                         }
-                        // sequence_num +=1 ;
-                        tokio::time::sleep(Duration::from_secs(1)).await; // Simulate periodic writes
-                        
+                    };
+
+
+                    match writer.write_all(packet.as_bytes()).await {
+                        Ok(_) => println!("Sent message: {}", packet),
+                        Err(e) => {
+                            eprintln!("Failed to write to stream: {}", e);
+                            break;
+                        }
                     }
-                    println!("Sent all packets");
-                    tx.send(0).await.expect("Failed to send end message");
-                    if queue.len() == 0 {break;}
+                    // sequence_num +=1 ;
+                    sleep(Duration::from_millis(1)).await;
                     
                 }
+                println!("Sent all packets");
+                tx.send(0).await.expect("Failed to send end message");
+                // if queue.len() == 0 {break;}
+
             }
             None => {
                 println!("No TcpStream available.");
@@ -518,7 +538,7 @@ impl FanucDriver {
                         },
                         Some(message) = rx.recv() => {
                             if message == 0 {break;}
-                            numbers_to_look_for.push_back(message);
+                            else{numbers_to_look_for.push_back(message);}
                         }
  
                     }
@@ -541,9 +561,6 @@ impl FanucDriver {
 
 
 }
-
-
-
 
 
 
