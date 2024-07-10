@@ -29,5 +29,5 @@ pub struct FrcWaitDINResponse {
     #[serde(rename = "ErrorID")]
     pub error_id: u32,
     #[serde(rename = "SequenceID")]
-    sequence_id: i32,
+    pub sequence_id: u32,
 }

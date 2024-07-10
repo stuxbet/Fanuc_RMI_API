@@ -56,7 +56,7 @@ impl FanucDriver {
 
         // Send a connection request packet to start the handshake
         self.send_packet(packet.clone()).await?;
-        let response = self.recieve::<CommunicationResponse>(packet).await?;
+        let response = self.recieve::<CommunicationResponse>().await?;
 
         //FIXME: this should prob have a defined behavior to handle not getting a port number back
         self.connection_port = match response {
@@ -109,7 +109,7 @@ impl FanucDriver {
         };
 
         self.send_packet(packet.clone()).await?;
-        let response = self.recieve::<CommandResponse>(packet).await?;
+        let response = self.recieve::<CommandResponse>().await?;
 
 
         if let CommandResponse::FrcInitialize(ref res) = response {
@@ -134,7 +134,7 @@ impl FanucDriver {
         };
 
         self.send_packet(packet.clone()).await?;
-        let response = self.recieve::<CommandResponse>(packet).await?;
+        let response = self.recieve::<CommandResponse>().await?;
 
         if let CommandResponse::FrcAbort(ref res) = response {
             if res.error_id != 0 {
@@ -155,7 +155,7 @@ impl FanucDriver {
         };
 
         self.send_packet(packet.clone()).await?;
-        let response = self.recieve::<CommandResponse>(packet).await?;        
+        let response = self.recieve::<CommandResponse>().await?;        
         if let CommandResponse::FrcGetStatus(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -175,7 +175,7 @@ impl FanucDriver {
         };
 
         self.send_packet(packet.clone()).await?;
-        let response = self.recieve::<CommunicationResponse>(packet).await?;        
+        let response = self.recieve::<CommunicationResponse>().await?;        
         if let CommunicationResponse::FrcDisconnect(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -217,7 +217,7 @@ impl FanucDriver {
         };
 
         self.send_packet(packet.clone()).await?;
-        let response = self.recieve::<InstructionResponse>(packet).await?;
+        let response = self.recieve::<InstructionResponse>().await?;
         if let InstructionResponse::FrcLinearRelative(ref res) = response {
             if res.error_id != 0 {
                 println!("Error ID: {}", res.error_id);
@@ -245,7 +245,7 @@ impl FanucDriver {
     }
 
 
-    async fn recieve<T>(&self, packet: String) -> Result<T, Box<dyn Error>>
+    async fn recieve<T>(&self) -> Result<T, Box<dyn Error>>
         where
             T: for<'a> Deserialize<'a> + std::fmt::Debug,
         {
@@ -259,7 +259,8 @@ impl FanucDriver {
                 }
 
                 let response = String::from_utf8_lossy(&buffer[..n]);
-                println!("Sent: {}\nReceived: {}", &packet, &response);
+
+                println!("Received: {}", &response);
 
                 // Parse JSON response
                 match serde_json::from_str::<T>(&response) {
@@ -410,15 +411,16 @@ impl FanucDriver {
     }
 
     pub async fn start_program(&self) -> Result<(), Box<dyn Error>> {
-        // let mut sequence_num: u32 = 1;
+
         let mut queue = self.load_gcode()?; // Handle synchronous load_gcode
-        let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 1
+        let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
 
-
+        //spins up 2 async concurent functions
         let (res1, res2) = tokio::join!(
             self.send_queue(&mut queue, tx),
             self.parse_path_responses(rx)
         );
+        
         match res1 {
             Ok(_) => println!("send_queue completed successfully"),
             Err(e) => eprintln!("send_queue failed: {}", e),
@@ -433,127 +435,69 @@ impl FanucDriver {
     }
 
     async fn send_queue(&self, queue: &mut VecDeque<PacketEnum>, tx: mpsc::Sender<u32>)-> Result<(), Box<dyn Error>>{
+        while !queue.is_empty() {
+            let packet = queue.pop_front();
+            
+            //all this match statement does is extract the sequence id from the packet about to be sent, it may not be neccesary later
+            let sequence_id = match &packet.as_ref().unwrap() {
+                PacketEnum::Instruction(instruction) => {
+                    match instruction {
+                        Instruction::FrcLinearRelative(packet) => packet.sequence_id,
+                        // Handle other instruction types similarly if needed
+                        _ => 0, // Use a default value if sequence_id is not applicable
+                    }
+                },
+                _ => 0, // Use a default value for non-instruction packets
+            };
 
-        match &self.write_half {
-            Some(stream) => {
+            tx.send(sequence_id).await.expect("Failed to send message");
 
-                // let mut writer = stream.lock().await;
-
-                while !queue.is_empty() {
-                    let packet = queue.pop_front();
-                    
-                    let sequence_id = match &packet.as_ref().unwrap() {
-                        PacketEnum::Instruction(instruction) => {
-                            match instruction {
-                                Instruction::FrcLinearRelative(packet) => packet.sequence_id,
-                                // Handle other instruction types similarly if needed
-                                _ => 0, // Use a default value if sequence_id is not applicable
-                            }
-                        },
-                        _ => 0, // Use a default value for non-instruction packets
-                    };
-
-                    tx.send(sequence_id).await.expect("Failed to send message");
-
-                    let packet = match serde_json::to_string(&packet) {
-                        Ok(serialized_packet) => serialized_packet + "\r\n",
-                        Err(e) => {
-                            eprintln!("Failed to serialize a packet: {}", e);
-                            break;
-                        }
-                    };
-                    println!("Got here 1");
-                    self.send_packet(packet).await?;
-                    println!("Got here 2");
-
-                    // match writer.write_all(packet.as_bytes()).await {
-                    //     Ok(_) => println!("Sent message: {}", packet),
-                    //     Err(e) => {
-                    //         eprintln!("Failed to write to stream: {}", e);
-                    //         break;
-                    //     }
-                    // }
-                
-                    sleep(Duration::from_millis(1)).await;
-                    
+            let packet = match serde_json::to_string(&packet) {
+                Ok(serialized_packet) => serialized_packet + "\r\n",
+                Err(e) => {
+                    eprintln!("Failed to serialize a packet: {}", e);
+                    break;
                 }
-                println!("Sent all packets");
-                tx.send(0).await.expect("Failed to send end message");
-                // if queue.len() == 0 {break;}
-
-            }
-            None => {
-                println!("No TcpStream available.");
-                return Err(Box::new(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Cannot start program without initializing an open TCP stream",
-                )));
-            }
+            };
+            self.send_packet(packet).await?;
+        
+            sleep(Duration::from_millis(1)).await;
+            
         }
+        println!("Sent all packets");
+        tx.send(0).await.expect("Failed to send end message");
 
         Ok(())
     
     
     }
     async fn parse_path_responses(&self, mut rx: mpsc::Receiver<u32>)-> Result<(), Box<dyn Error>>{
-        match &self.read_half {
-            Some(read_stream) => {
-                let mut reader = read_stream.lock().await;
 
-                let mut numbers_to_look_for: VecDeque<u32> = VecDeque::new();
-                let mut buffer = vec![0; 2048];
+        let mut numbers_to_look_for: VecDeque<u32> = VecDeque::new();
+        loop {
+            tokio::select! {
+                result = self.recieve::<InstructionResponse>() => {
+                    match result {
+                        Ok(response_packet) => {
 
-                loop {
-                    tokio::select! {
-                        result = reader.read(&mut buffer) => {
-                            match result {
-                                Ok(0) => break, // Connection closed
-                                Ok(n) => {
-                                    let response = String::from_utf8_lossy(&buffer[..n]);
-                                    println!("Received {}", response);
+                            let sequence_id = response_packet.get_sequence_id();
 
-                                    let request_json: serde_json::Value = serde_json::from_str(&response)?;
+                            println!("Found matching id: {}", sequence_id);
+                            numbers_to_look_for.retain(|&x| x != sequence_id);
+                            // println!("{:?}", numbers_to_look_for);
 
-                                    if let Some(id) = request_json.get("SequenceID") {
-                                        if let Some(id_num) = id.as_u64() {
-                                            let id_num: Result<u32, _> = id_num.try_into();
-                                            let id_num:u32 = id_num.unwrap();
 
-                                            if numbers_to_look_for.contains(&id_num) {
-                                                println!("Found matching id: {}", id_num);
-                                                // numbers_to_look_for.remove(&id_num);
-                                                numbers_to_look_for.retain(|&x| x != id_num);
-
-                                                println!("{:?}",numbers_to_look_for);
-                                            }
-                                        } else {
-                                            println!("The value for 'SequenceID' cannot be turned into a u64");
-                                        }
-                                    } else {
-                                        println!("Key 'SequenceID' not found");
-                                    }
-
-                                }
-                                Err(e) => {
-                                    eprintln!("Failed to read from stream: {}", e);
-                                }
-                            }
                         },
-                        Some(message) = rx.recv() => {
-                            if message == 0 {break;}
-                            else{numbers_to_look_for.push_back(message);}
+                        Err(e) => {
+                            eprintln!("Failed to receive or parse response: {}", e);
                         }
- 
                     }
                 }
+                Some(message) = rx.recv() => {
+                    if message == 0 {break;} 
+                    else {numbers_to_look_for.push_back(message);}
+                },
             }
-            None => {
-                println!("No TcpStream available.");
-                return Err(Box::new(io::Error::new(
-                    io::ErrorKind::NotConnected,
-                    "Cannot start program without initializing an open TCP stream",
-                )));
-            }            
         }
         Ok(())
 

@@ -95,7 +95,28 @@ pub enum InstructionResponse {
 }
 
 
-
+impl InstructionResponse {
+    pub fn get_sequence_id(&self) -> u32 {
+        match self {
+            InstructionResponse::FrcWaitDIN(resp) => resp.sequence_id,
+            InstructionResponse::FrcSetUFrame(resp) => resp.sequence_id,
+            InstructionResponse::FrcSetUTool(resp) => resp.sequence_id,
+            InstructionResponse::FrcWaitTime(resp) => resp.sequence_id,
+            InstructionResponse::FrcSetPayLoad(resp) => resp.sequence_id,
+            InstructionResponse::FrcCall(resp) => resp.sequence_id,
+            InstructionResponse::FrcLinearMotion(resp) => resp.sequence_id,
+            InstructionResponse::FrcLinearRelative(resp) => resp.sequence_id,
+            InstructionResponse::FrcLinearRelativeJRep(resp) => resp.sequence_id,
+            InstructionResponse::FrcJointMotion(resp) => resp.sequence_id,
+            InstructionResponse::FrcJointRelative(resp) => resp.sequence_id,
+            InstructionResponse::FrcCircularMotion(resp) => resp.sequence_id,
+            InstructionResponse::FrcCircularRelative(resp) => resp.sequence_id,
+            InstructionResponse::FrcJointMotionJRep(resp) => resp.sequence_id,
+            InstructionResponse::FrcJointRelativeJRep(resp) => resp.sequence_id,
+            InstructionResponse::FrcLinearMotionJRep(resp) => resp.sequence_id,
+        }
+    }
+}
 
 
 

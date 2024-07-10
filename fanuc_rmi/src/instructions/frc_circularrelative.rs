@@ -56,5 +56,5 @@ pub struct FrcCircularRelativeResponse {
     #[serde(rename = "ErrorID")]
     pub error_id: u32,
     #[serde(rename = "SequenceID")]
-    sequence_id: u32,
+    pub sequence_id: u32,
 }
