@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 use tokio::task;
 use std::{error::Error, io, sync::Arc, time::Duration};
 use tokio::{ net::TcpStream, sync::Mutex, time::sleep};
-use tokio::io::{ AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split};
+use tokio::io::{ AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split, BufReader};
 use std::collections::VecDeque;
 
 
@@ -17,9 +17,9 @@ use crate::{Configuration, Position, SpeedType, TermType, FrcError };
 pub struct FanucDriver {
     addr: String,
     initialize_port: u32,
-    connection_port: Option<String>,
+    connection_port: Option<u32>,
     write_half: Option<Arc<Mutex<WriteHalf<TcpStream>>>>,
-    read_half: Option<Arc<Mutex<ReadHalf<TcpStream>>>>
+    read_half: Option<Arc<Mutex<ReadHalf<TcpStream>>>>,
 
 }
 
@@ -31,7 +31,6 @@ impl FanucDriver {
             connection_port: None,
             write_half: None,
             read_half:None,
-            
         }
     }
 
@@ -60,7 +59,7 @@ impl FanucDriver {
 
         //FIXME: this should prob have a defined behavior to handle not getting a port number back
         self.connection_port = match response {
-            CommunicationResponse::FrcConnect(res) => Some(res.port_number.to_string()),
+            CommunicationResponse::FrcConnect(res) => Some(res.port_number),
             _ => None,
         };
 
@@ -280,7 +279,6 @@ impl FanucDriver {
 
 
 
-
     fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, Box<dyn Error>> {
         //here is where we will convert the gcode to the packets we need and return a queue
 
@@ -461,46 +459,147 @@ impl FanucDriver {
             };
             self.send_packet(packet).await?;
         
-            sleep(Duration::from_millis(1)).await;
+            // sleep(Duration::from_millis(1)).await;
             
         }
         println!("Sent all packets");
+
+        //when 0 is sent it shuts  off the recciever system so we wait one sec so that the response can be sent back and processed
+        sleep(Duration::from_secs(1)).await;
+
         tx.send(0).await.expect("Failed to send end message");
 
         Ok(())
     
     
     }
-    async fn parse_path_responses(&self, mut rx: mpsc::Receiver<u32>)-> Result<(), Box<dyn Error>>{
+    
+    // async fn parse_path_responses(&self, mut rx: mpsc::Receiver<u32>)-> Result<(), Box<dyn Error>>{
+    //     match &self.read_half {
+    //         Some(read_stream) => {
+    //             let mut reader = read_stream.lock().await;
 
-        let mut numbers_to_look_for: VecDeque<u32> = VecDeque::new();
-        loop {
-            tokio::select! {
-                result = self.recieve::<InstructionResponse>() => {
-                    match result {
-                        Ok(response_packet) => {
+    //             let mut numbers_to_look_for: VecDeque<u32> = VecDeque::new();
+    //             let mut buffer = vec![0; 2048];
 
-                            let sequence_id = response_packet.get_sequence_id();
+    //             loop {
+    //                 tokio::select! {
+    //                     result = reader.read(&mut buffer) => {
+    //                         match result {
+    //                             Ok(0) => break, // Connection closed
+    //                             Ok(n) => {
+    //                                 let response = String::from_utf8_lossy(&buffer[..n]);
+    //                                 println!("Received {}", response);
 
-                            println!("Found matching id: {}", sequence_id);
-                            numbers_to_look_for.retain(|&x| x != sequence_id);
-                            // println!("{:?}", numbers_to_look_for);
+    //                                 // let request_json: serde_json::Value = serde_json::from_str(&response)?;
+
+    //                                 let response_packet: Option<InstructionResponse> = match serde_json::from_str::<InstructionResponse>(&response) {
+    //                                     Ok(response_packet) => Some(response_packet),
+    //                                     Err(e) => {
+    //                                         println!("Could not parse response: {}", e);
+    //                                         None
+    //                                     }
+    //                                 };
+    //                                 let response_packet = response_packet.expect("no parsey parsey gringo");
 
 
+    //                                 let sequence_id = response_packet.get_sequence_id();
+
+    //                                 println!("Found matching id: {}", sequence_id);
+    //                                 numbers_to_look_for.retain(|&x| x != sequence_id);
+ 
+
+    //                             }
+    //                             Err(e) => {
+    //                                 eprintln!("Failed to read from stream: {}", e);
+    //                             }
+    //                         }
+    //                     },
+    //                     Some(message) = rx.recv() => {
+    //                         if message == 0 {break;}
+    //                         else{numbers_to_look_for.push_back(message);}
+    //                     }
+ 
+    //                 }
+    //             }
+    //         }
+    //         None => {
+    //             println!("No TcpStream available.");
+    //             return Err(Box::new(io::Error::new(
+    //                 io::ErrorKind::NotConnected,
+    //                 "Cannot start program without initializing an open TCP stream",
+    //             )));
+    //         }            
+    //     }
+    //     Ok(())
+
+    // }
+    async fn parse_path_responses(&self, mut rx: mpsc::Receiver<u32>) -> Result<(), Box<dyn Error>> {
+        match &self.read_half {
+            Some(read_stream) => {
+                let mut reader = read_stream.lock().await;
+
+                let mut numbers_to_look_for: VecDeque<u32> = VecDeque::new();
+                let mut buffer = vec![0; 2048];
+                let mut temp_buffer = Vec::new();
+
+                loop {
+                    tokio::select! {
+                        result = reader.read(&mut buffer) => {
+                            match result {
+                                Ok(0) => break, // Connection closed
+                                Ok(n) => {
+                                    // Append new data to temp_buffer
+                                    temp_buffer.extend_from_slice(&buffer[..n]);
+
+                                    while let Some(pos) = temp_buffer.iter().position(|&x| x == b'\n') {
+                                        // Split the buffer into the current message and the rest
+                                        let request: Vec<u8> = temp_buffer.drain(..=pos).collect();
+                                        // Remove the newline character
+                                        let request = &request[..request.len() - 1];
+
+                                        let response_str = String::from_utf8_lossy(request);
+                                        println!("Received: {}", response_str);
+
+                                        let response_packet: Option<InstructionResponse> = match serde_json::from_str::<InstructionResponse>(&response_str) {
+                                            Ok(response_packet) => Some(response_packet),
+                                            Err(e) => {
+                                                println!("Could not parse response: {}", e);
+                                                None
+                                            }
+                                        };
+
+                                        if let Some(response_packet) = response_packet {
+                                            let sequence_id = response_packet.get_sequence_id();
+                                            println!("Found matching id: {}", sequence_id);
+                                            numbers_to_look_for.retain(|&x| x != sequence_id);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("Failed to read from stream: {}", e);
+                                }
+                            }
                         },
-                        Err(e) => {
-                            eprintln!("Failed to receive or parse response: {}", e);
+                        Some(message) = rx.recv() => {
+                            if message == 0 {
+                                break;
+                            } else {
+                                numbers_to_look_for.push_back(message);
+                            }
                         }
                     }
                 }
-                Some(message) = rx.recv() => {
-                    if message == 0 {break;} 
-                    else {numbers_to_look_for.push_back(message);}
-                },
+            }
+            None => {
+                println!("No TcpStream available.");
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::NotConnected,
+                    "Cannot start program without initializing an open TCP stream",
+                )));
             }
         }
         Ok(())
-
     }
 
 

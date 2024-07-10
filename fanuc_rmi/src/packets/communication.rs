@@ -34,7 +34,7 @@ pub struct FrcConnectResponse {
     #[serde(rename = "ErrorID")]
     pub error_id: u32,
     #[serde(rename = "PortNumber")]
-    pub port_number: u16,
+    pub port_number: u32,
     #[serde(rename = "MajorVersion")]
     pub major_version: u16,
     #[serde(rename = "MinorVersion")]
