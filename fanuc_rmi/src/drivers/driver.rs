@@ -6,7 +6,6 @@ use tokio::{ net::TcpStream, sync::Mutex, time::sleep};
 use tokio::io::{ AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split};
 use std::collections::VecDeque;
 
-
 use crate::packets::*;
 use crate::instructions::*;
 use crate::commands::*;
@@ -17,6 +16,7 @@ use crate::{Configuration, Position, SpeedType, TermType, FrcError };
 pub struct  FanucDriverConfig {
     addr: String,
     port: u32,
+    max_messages: usize,
 }
 
 
@@ -24,9 +24,11 @@ impl Default for FanucDriverConfig {
     fn default() -> Self {
         let addr = "127.0.0.1".to_string(); // Change if the server is running on a different machine
         let port = 16001;
+        let max_messages = 30;
         Self {
             addr,
             port,
+            max_messages
         }
     }
 }
@@ -34,6 +36,7 @@ impl Default for FanucDriverConfig {
 #[derive( Debug, Clone)]
 pub struct FanucDriver {
     pub config: FanucDriverConfig,
+    pub messages: Arc<Mutex<VecDeque<String>>>,
     write_half: Arc<Mutex<WriteHalf<TcpStream>>>,
     read_half: Arc<Mutex<ReadHalf<TcpStream>>>,
 }
@@ -87,16 +90,41 @@ impl FanucDriver {
         let init_addr = format!("{}:{}",config.addr, new_port);
         let stream = connect_with_retries(&init_addr, 3).await?;
 
+        // let (tx, mut rx) = mpsc::channel(100);
+        
 
         let (read_half, write_half) = split(stream);
         let read_half = Arc::new(Mutex::new(read_half));
         let write_half = Arc::new(Mutex::new(write_half));
-        
+        let messages: Arc<Mutex<VecDeque<String>>> = Arc::new(Mutex::new(VecDeque::new()));
+        let mut msg = messages.lock().await;
+        msg.push_back("Connected".to_string());
+        drop(msg);
+        // messages.push_back("Connected".to_string());
+
         Ok(Self {
             config,
+            messages,
             write_half,
             read_half,
         })
+    }
+
+    async fn log_message<T: Into<String>>(&self, message:T){
+        let message = message.into();
+        let messages = self.messages.clone();
+        let mut messages = messages.lock().await;
+
+        #[cfg(feature="logging")]
+        println!(&message);
+
+        loop{
+            if messages.len() >= self.config.max_messages {
+                messages.pop_front();
+            }
+            else{break}
+        }
+        messages.push_back(message);
     }
 
 
@@ -114,7 +142,7 @@ impl FanucDriver {
 
         if let CommandResponse::FrcInitialize(ref res) = response {
             if res.error_id != 0 {
-                println!("Error ID: {}", res.error_id);
+                self.log_message(format!("Error ID: {}", res.error_id)).await;
                 return Err(Box::new(FrcError::FanucErrorCode(res.error_id)));
             }
         }
@@ -137,7 +165,7 @@ impl FanucDriver {
 
         if let CommandResponse::FrcAbort(ref res) = response {
             if res.error_id != 0 {
-                println!("Error ID: {}", res.error_id);
+                self.log_message(format!("Error ID: {}", res.error_id)).await;
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a abort packet", res.error_id))));
             }
         }
@@ -157,7 +185,7 @@ impl FanucDriver {
         let response = self.recieve::<CommandResponse>().await?;        
         if let CommandResponse::FrcGetStatus(ref res) = response {
             if res.error_id != 0 {
-                println!("Error ID: {}", res.error_id);
+                self.log_message(format!("Error ID: {}", res.error_id)).await;
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a FrcGetStatus return packet", res.error_id))));
             }
         }
@@ -177,7 +205,7 @@ impl FanucDriver {
         let response = self.recieve::<CommunicationResponse>().await?;        
         if let CommunicationResponse::FrcDisconnect(ref res) = response {
             if res.error_id != 0 {
-                println!("Error ID: {}", res.error_id);
+                self.log_message(format!("Error ID: {}", res.error_id)).await;
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a Disconect packet", res.error_id))));
             }
         }
@@ -189,7 +217,7 @@ impl FanucDriver {
     async fn send_packet(&self, packet: String) -> Result<(), Box<dyn Error>> {      
             let mut stream = self.write_half.lock().await;
             stream.write_all(packet.as_bytes()).await?;
-            println!("Sent: {}", packet);
+            self.log_message(format!("Sent: {}", packet)).await;
             Ok(())
     }
 
@@ -208,13 +236,13 @@ impl FanucDriver {
 
             let response = String::from_utf8_lossy(&buffer[..n]);
 
-            println!("Received: {}", &response);
+            self.log_message(format!("Received: {}", &response)).await;
 
             // Parse JSON response
             match serde_json::from_str::<T>(&response) {
                 Ok(response_packet) => Ok(response_packet),
                 Err(e) => {
-                    println!("Could not parse response: {}", e);
+                    self.log_message(format!("Could not parse response: {}", e)).await;
                     Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse response")))
                 }
             }
@@ -251,7 +279,7 @@ impl FanucDriver {
         let response = self.recieve::<InstructionResponse>().await?;
         if let InstructionResponse::FrcLinearRelative(ref res) = response {
             if res.error_id != 0 {
-                println!("Error ID: {}", res.error_id);
+                self.log_message(format!("Error ID: {}", res.error_id)).await;
                 return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a linear motion on return packet", res.error_id))));
             }
         }
@@ -322,13 +350,13 @@ impl FanucDriver {
         );
         
         match res1 {
-            Ok(_) => println!("send_queue completed successfully"),
-            Err(e) => eprintln!("send_queue failed: {}", e),
+            Ok(_) => self.log_message("send_queue completed successfully").await,
+            Err(e) => self.log_message(format!("send_queue failed: {}", e)).await,
         }
-    
+
         match res2 {
-            Ok(_) => println!("parse_path_responses completed successfully"),
-            Err(e) => eprintln!("parse_path_responses failed: {}", e),
+            Ok(_) => self.log_message("read_queue_responses completed successfully").await,
+            Err(e) => self.log_message(format!("read_queue_responses failed: {}", e)).await,
         }
 
         Ok(())
@@ -355,7 +383,7 @@ impl FanucDriver {
             let packet = match serde_json::to_string(&packet) {
                 Ok(serialized_packet) => serialized_packet + "\r\n",
                 Err(e) => {
-                    eprintln!("Failed to serialize a packet: {}", e);
+                    self.log_message(format!("Failed to serialize a packet: {}", e)).await;
                     break;
                 }
             };
@@ -364,7 +392,7 @@ impl FanucDriver {
             // sleep(Duration::from_millis(1)).await;
             
         }
-        println!("Sent all packets");
+        self.log_message("Sent all packets").await;
 
         //when 0 is sent it shuts  off the recciever system so we wait one sec so that the response can be sent back and processed
         sleep(Duration::from_secs(1)).await;
@@ -399,25 +427,25 @@ impl FanucDriver {
                                 let request = &request[..request.len() - 1];
 
                                 let response_str = String::from_utf8_lossy(request);
-                                println!("Received: {}", response_str);
+                                self.log_message(response_str.clone()).await;
 
                                 let response_packet: Option<InstructionResponse> = match serde_json::from_str::<InstructionResponse>(&response_str) {
                                     Ok(response_packet) => Some(response_packet),
                                     Err(e) => {
-                                        println!("Could not parse response: {}", e);
+                                        self.log_message(format!("Could not parse response: {}", e)).await;
                                         None
                                     }
                                 };
 
                                 if let Some(response_packet) = response_packet {
                                     let sequence_id = response_packet.get_sequence_id();
-                                    println!("Found matching id: {}", sequence_id);
+                                    self.log_message(format!("Found matching id: {}", sequence_id)).await;
                                     numbers_to_look_for.retain(|&x| x != sequence_id);
                                 }
                             }
                         }
                         Err(e) => {
-                            eprintln!("Failed to read from stream: {}", e);
+                            self.log_message(format!("Failed to read from stream: {}", e)).await;
                         }
                     }
                 },
