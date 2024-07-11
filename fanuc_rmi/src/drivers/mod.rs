@@ -13,7 +13,7 @@ use crate::commands::*;
 use crate::PacketEnum;
 use crate::{Configuration, Position, SpeedType, TermType, FrcError };
 
-#[derive( Debug, Clone, Copy)]
+#[derive( Debug, Clone)]
 pub struct FanucDriver {
     addr: String,
     initialize_port: u32,
