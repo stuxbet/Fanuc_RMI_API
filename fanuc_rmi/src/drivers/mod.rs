@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::mpsc;
-use tokio::task;
 use std::{error::Error, io, sync::Arc, time::Duration};
 use tokio::{ net::TcpStream, sync::Mutex, time::sleep};
 use tokio::io::{ AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split, BufReader};
@@ -14,6 +13,7 @@ use crate::commands::*;
 use crate::PacketEnum;
 use crate::{Configuration, Position, SpeedType, TermType, FrcError };
 
+#[derive( Debug, Clone, Copy)]
 pub struct FanucDriver {
     addr: String,
     initialize_port: u32,
@@ -474,66 +474,7 @@ impl FanucDriver {
     
     }
     
-    // async fn parse_path_responses(&self, mut rx: mpsc::Receiver<u32>)-> Result<(), Box<dyn Error>>{
-    //     match &self.read_half {
-    //         Some(read_stream) => {
-    //             let mut reader = read_stream.lock().await;
 
-    //             let mut numbers_to_look_for: VecDeque<u32> = VecDeque::new();
-    //             let mut buffer = vec![0; 2048];
-
-    //             loop {
-    //                 tokio::select! {
-    //                     result = reader.read(&mut buffer) => {
-    //                         match result {
-    //                             Ok(0) => break, // Connection closed
-    //                             Ok(n) => {
-    //                                 let response = String::from_utf8_lossy(&buffer[..n]);
-    //                                 println!("Received {}", response);
-
-    //                                 // let request_json: serde_json::Value = serde_json::from_str(&response)?;
-
-    //                                 let response_packet: Option<InstructionResponse> = match serde_json::from_str::<InstructionResponse>(&response) {
-    //                                     Ok(response_packet) => Some(response_packet),
-    //                                     Err(e) => {
-    //                                         println!("Could not parse response: {}", e);
-    //                                         None
-    //                                     }
-    //                                 };
-    //                                 let response_packet = response_packet.expect("no parsey parsey gringo");
-
-
-    //                                 let sequence_id = response_packet.get_sequence_id();
-
-    //                                 println!("Found matching id: {}", sequence_id);
-    //                                 numbers_to_look_for.retain(|&x| x != sequence_id);
- 
-
-    //                             }
-    //                             Err(e) => {
-    //                                 eprintln!("Failed to read from stream: {}", e);
-    //                             }
-    //                         }
-    //                     },
-    //                     Some(message) = rx.recv() => {
-    //                         if message == 0 {break;}
-    //                         else{numbers_to_look_for.push_back(message);}
-    //                     }
- 
-    //                 }
-    //             }
-    //         }
-    //         None => {
-    //             println!("No TcpStream available.");
-    //             return Err(Box::new(io::Error::new(
-    //                 io::ErrorKind::NotConnected,
-    //                 "Cannot start program without initializing an open TCP stream",
-    //             )));
-    //         }            
-    //     }
-    //     Ok(())
-
-    // }
     async fn parse_path_responses(&self, mut rx: mpsc::Receiver<u32>) -> Result<(), Box<dyn Error>> {
         match &self.read_half {
             Some(read_stream) => {
