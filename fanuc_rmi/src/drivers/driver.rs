@@ -1,16 +1,18 @@
 use serde::Deserialize;
 // use serde::Serialize;
 use tokio::sync::mpsc;
+use std::fmt::format;
 use std::{error::Error, io, sync::Arc, time::Duration};
 use tokio::{ net::TcpStream, sync::Mutex, time::sleep};
 use tokio::io::{ AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf, split};
 use std::collections::VecDeque;
 
-use crate::packets::*;
+use crate::{packets::*, FanucErrorCode};
 use crate::instructions::*;
 use crate::commands::*;
 use crate::PacketEnum;
 use crate::{Configuration, Position, SpeedType, TermType, FrcError };
+use std::marker::Send;
 
 #[derive(Debug,Clone)]
 pub struct  FanucDriverConfig {
@@ -41,8 +43,14 @@ pub struct FanucDriver {
     read_half: Arc<Mutex<ReadHalf<TcpStream>>>,
 }
 
+// Static assertion to ensure FanucDriver is Send
+// const _: fn() = || {
+//     fn assert_send<T: Send>() {}
+//     assert_send::<FanucDriver>();
+// };
+
 impl FanucDriver {
-    pub async fn connect(config: FanucDriverConfig) -> Result<FanucDriver, Box<dyn Error>> {
+    pub async fn connect(config: FanucDriverConfig) -> Result<FanucDriver, FrcError> {
         let init_addr = format!("{}:{}",&config.addr, &config.port);
         let mut stream = connect_with_retries(&init_addr, 3).await?;
 
@@ -51,34 +59,42 @@ impl FanucDriver {
         
         let packet = match serde_json::to_string(&packet) {
             Ok(serialized_packet) => serialized_packet + "\r\n",
-            Err(_) => return Err(Box::new(FrcError::Serialization("Communication: Connect packet didnt serialize correctly".to_string()))),
+            Err(_) => return Err(FrcError::Serialization("Communication: Connect packet didnt serialize correctly".to_string())),
         };
 
-        stream.write(packet.as_bytes()).await?;
-        
+        if let Err(e) = stream.write_all(packet.as_bytes()).await {
+            let err = FrcError::FailedToSend(format!("{}",e));
+            // self.log_message(err.to_string()).await;
+            return Err(err);
+        }  
+
         let mut buffer = vec![0; 2048];
 
-        let n = stream.read(&mut buffer).await?;
+        let n: usize = match stream.read(&mut buffer).await{
+            Ok(n)=> n,
+            Err(e) => {
+                let err = FrcError::FailedToRecieve(format!("{}",e));
+                return Err(err);
+            }
+        };
+
         if n == 0 {
-            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Connection closed by peer")));
+            let e = FrcError::Disconnected();
+            return Err(e);
         }
 
         let response = String::from_utf8_lossy(&buffer[..n]);
         
         println!("Sent: {}\nReceived: {}", &packet, &response);
 
-        // Parse JSON response
-        let res = match serde_json::from_str::<CommunicationResponse>(&response) {
-            Ok(response_packet) => {
-                // Successfully parsed JSON into the generic type T
-                response_packet
-            }
+        let res: CommunicationResponse  = match serde_json::from_str::<CommunicationResponse>(&response) {
+            Ok(response_packet) => response_packet,
             Err(e) => {
-                // Failed to parse JSON
-                println!("Could not parse response: {}", e);
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse response")))
+                let e = FrcError::Serialization(format!("Could not parse response: {}", e));
+                return Err(e)
             }
         };
+
 
         let mut new_port = 0;
         match res {
@@ -88,10 +104,7 @@ impl FanucDriver {
 
         drop(stream);
         let init_addr = format!("{}:{}",config.addr, new_port);
-        let stream = connect_with_retries(&init_addr, 3).await?;
-
-        // let (tx, mut rx) = mpsc::channel(100);
-        
+        let stream = connect_with_retries(&init_addr, 3).await?;        
 
         let (read_half, write_half) = split(stream);
         let read_half = Arc::new(Mutex::new(read_half));
@@ -100,7 +113,6 @@ impl FanucDriver {
         let mut msg = messages.lock().await;
         msg.push_back("Connected".to_string());
         drop(msg);
-        // messages.push_back("Connected".to_string());
 
         Ok(Self {
             config,
@@ -116,7 +128,7 @@ impl FanucDriver {
         let mut messages = messages.lock().await;
 
         #[cfg(feature="logging")]
-        println!(&message);
+        println!("{}", &message);
 
         loop{
             if messages.len() >= self.config.max_messages {
@@ -128,36 +140,41 @@ impl FanucDriver {
     }
 
 
-    pub async fn initialize(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn initialize(&self) -> Result<(), FrcError> {
 
         let packet = Command::FrcInitialize(FrcInitialize::default());
         
         let packet = match serde_json::to_string(&packet) {
             Ok(serialized_packet) => serialized_packet + "\r\n",
-            Err(_) => return Err(Box::new(FrcError::Serialization("Initalize packet didnt serialize correctly".to_string()))),
+            Err(_) => return Err(FrcError::Serialization("Initalize packet didnt serialize correctly".to_string())),
         };
 
-        self.send_packet(packet.clone()).await?;
+        if let Err(e) = self.send_packet(packet.clone()).await {
+            self.log_message(e.to_string()).await;
+            return Err(e);
+        }; 
+
         let response = self.recieve::<CommandResponse>().await?;
 
         if let CommandResponse::FrcInitialize(ref res) = response {
             if res.error_id != 0 {
                 self.log_message(format!("Error ID: {}", res.error_id)).await;
-                return Err(Box::new(FrcError::FanucErrorCode(res.error_id)));
+                let error_code = FanucErrorCode::try_from(res.error_id).unwrap_or(FanucErrorCode::UnrecognizedFrcError);
+                return Err(FrcError::FanucErrorCode(error_code));
             }
-        }
+        };
         Ok(())
 
     }
     
         
-    pub async fn abort(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn abort(&self) -> Result<(), FrcError> {
 
         let packet = Command::FrcAbort {};
         
         let packet = match serde_json::to_string(&packet) {
             Ok(serialized_packet) => serialized_packet + "\r\n",
-            Err(_) => return Err(Box::new(FrcError::Serialization("Abort packet didnt serialize correctly".to_string()))),
+            Err(_) => return Err(FrcError::Serialization("Abort packet didnt serialize correctly".to_string())),
         };
 
         self.send_packet(packet.clone()).await?;
@@ -166,19 +183,20 @@ impl FanucDriver {
         if let CommandResponse::FrcAbort(ref res) = response {
             if res.error_id != 0 {
                 self.log_message(format!("Error ID: {}", res.error_id)).await;
-                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a abort packet", res.error_id))));
+                let error_code = FanucErrorCode::try_from(res.error_id).unwrap_or(FanucErrorCode::UnrecognizedFrcError);
+                return Err(FrcError::FanucErrorCode(error_code));            
             }
         }
         Ok(())
     }
 
-    pub async fn get_status(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn get_status(&self) -> Result<(), FrcError> {
 
         let packet = Command::FrcGetStatus {};
         
         let packet = match serde_json::to_string(&packet) {
             Ok(serialized_packet) => serialized_packet + "\r\n",
-            Err(_) => return Err(Box::new(FrcError::Serialization("get_status packet didnt serialize correctly".to_string()))),
+            Err(_) => return Err(FrcError::Serialization("get_status packet didnt serialize correctly".to_string())),
         };
 
         self.send_packet(packet.clone()).await?;
@@ -186,19 +204,20 @@ impl FanucDriver {
         if let CommandResponse::FrcGetStatus(ref res) = response {
             if res.error_id != 0 {
                 self.log_message(format!("Error ID: {}", res.error_id)).await;
-                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a FrcGetStatus return packet", res.error_id))));
+                let error_code = FanucErrorCode::try_from(res.error_id).unwrap_or(FanucErrorCode::UnrecognizedFrcError);
+                return Err(FrcError::FanucErrorCode(error_code)); 
             }
         }
         Ok(())
     }
 
-    pub async fn disconnect(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn disconnect(&self) -> Result<(), FrcError> {
 
         let packet = Communication::FrcDisconnect {};
         
         let packet = match serde_json::to_string(&packet) {
             Ok(serialized_packet) => serialized_packet + "\r\n",
-            Err(_) => return Err(Box::new(FrcError::Serialization("Disconnect packet didnt serialize correctly".to_string()))),
+            Err(_) => return Err(FrcError::Serialization("Disconnect packet didnt serialize correctly".to_string())),
         };
 
         self.send_packet(packet.clone()).await?;
@@ -206,22 +225,27 @@ impl FanucDriver {
         if let CommunicationResponse::FrcDisconnect(ref res) = response {
             if res.error_id != 0 {
                 self.log_message(format!("Error ID: {}", res.error_id)).await;
-                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a Disconect packet", res.error_id))));
-            }
+                let error_code = FanucErrorCode::try_from(res.error_id).unwrap_or(FanucErrorCode::UnrecognizedFrcError);
+                return Err(FrcError::FanucErrorCode(error_code));             }
         }
 
         Ok(())
 
     }
 
-    async fn send_packet(&self, packet: String) -> Result<(), Box<dyn Error>> {      
+    async fn send_packet(&self, packet: String) -> Result<(), FrcError> {      
             let mut stream = self.write_half.lock().await;
-            stream.write_all(packet.as_bytes()).await?;
+
+            if let Err(e) = stream.write_all(packet.as_bytes()).await {
+                let err = FrcError::FailedToSend(format!("{}",e));
+                self.log_message(err.to_string()).await;
+                return Err(err);
+            }            
             self.log_message(format!("Sent: {}", packet)).await;
             Ok(())
     }
 
-    async fn recieve<T>(&self) -> Result<T, Box<dyn Error>>
+    async fn recieve<T>(&self) -> Result<T, FrcError>
         where
             T: for<'a> Deserialize<'a> + std::fmt::Debug,
         {
@@ -229,9 +253,20 @@ impl FanucDriver {
             let mut buffer = vec![0; 2048];
             let mut stream = self.read_half.lock().await;
 
-            let n = stream.read(&mut buffer).await?;
+            let n: usize = match stream.read(&mut buffer).await{
+                Ok(n)=> n,
+                Err(e) => {
+                    let err = FrcError::FailedToRecieve(format!("{}",e));
+                    self.log_message(err.to_string()).await;
+                    return Err(err);
+                }
+            };
+
+
             if n == 0 {
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Connection closed by peer")));
+                let e = FrcError::Disconnected();
+                self.log_message(e.to_string()).await;
+                return Err(e);
             }
 
             let response = String::from_utf8_lossy(&buffer[..n]);
@@ -242,8 +277,9 @@ impl FanucDriver {
             match serde_json::from_str::<T>(&response) {
                 Ok(response_packet) => Ok(response_packet),
                 Err(e) => {
-                    self.log_message(format!("Could not parse response: {}", e)).await;
-                    Err(Box::new(io::Error::new(io::ErrorKind::Other, "could not parse response")))
+                    let e = FrcError::Serialization(format!("Could not parse response: {}", e));
+                    self.log_message(e.to_string()).await;
+                    return Err(e);
                 }
             }
         }
@@ -258,7 +294,7 @@ impl FanucDriver {
         term_t: TermType,
         term_va: u8,
 
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), FrcError> {
         let packet = Instruction::FrcLinearRelative(FrcLinearRelative::new(
             sequenceid,    
             config,
@@ -272,7 +308,7 @@ impl FanucDriver {
         
         let packet = match serde_json::to_string(&packet) {
             Ok(serialized_packet) => serialized_packet + "\r\n",
-            Err(_) => return Err(Box::new(FrcError::Serialization("linear motion packet didnt serialize correctly".to_string()))),
+            Err(_) => return Err(FrcError::Serialization("linear motion packet didnt serialize correctly".to_string())),
         };
 
         self.send_packet(packet.clone()).await?;
@@ -280,14 +316,15 @@ impl FanucDriver {
         if let InstructionResponse::FrcLinearRelative(ref res) = response {
             if res.error_id != 0 {
                 self.log_message(format!("Error ID: {}", res.error_id)).await;
-                return Err(Box::new(io::Error::new(io::ErrorKind::Interrupted, format!("Fanuc threw a Error #{} on a linear motion on return packet", res.error_id))));
+                let error_code = FanucErrorCode::try_from(res.error_id).unwrap_or(FanucErrorCode::UnrecognizedFrcError);
+                return Err(FrcError::FanucErrorCode(error_code)); 
             }
         }
         Ok(())
 
     }
 
-    pub fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, Box<dyn Error>> {
+    pub fn load_gcode(&self) -> Result<VecDeque<PacketEnum>, FrcError> {
         let mut queue: VecDeque<PacketEnum> = VecDeque::new();
         queue.push_back(PacketEnum::Instruction(Instruction::FrcLinearRelative(FrcLinearRelative::new(
             1,    
@@ -338,7 +375,7 @@ impl FanucDriver {
         Ok(queue)
     }
 
-    pub async fn start_program(&self) -> Result<(), Box<dyn Error>> {
+    pub async fn start_program(&self) -> Result<(), FrcError> {
 
         let mut queue = self.load_gcode()?; // Handle synchronous load_gcode
         let (tx, rx) = mpsc::channel(100); // Create a channel with a buffer size of 100
@@ -362,7 +399,7 @@ impl FanucDriver {
         Ok(())
     }
 
-    async fn send_queue(&self, queue: &mut VecDeque<PacketEnum>, tx: mpsc::Sender<u32>)-> Result<(), Box<dyn Error>>{
+    async fn send_queue(&self, queue: &mut VecDeque<PacketEnum>, tx: mpsc::Sender<u32>)-> Result<(), FrcError>{
         while !queue.is_empty() {
             let packet = queue.pop_front();
             
@@ -403,7 +440,7 @@ impl FanucDriver {
     }
     
 
-    async fn read_queue_responses(&self, mut rx: mpsc::Receiver<u32>) -> Result<(), Box<dyn Error>> {
+    async fn read_queue_responses(&self, mut rx: mpsc::Receiver<u32>) -> Result<(), FrcError> {
         
         let mut reader = self.read_half.lock().await;
 
@@ -465,18 +502,18 @@ impl FanucDriver {
 }
 
 
-async fn connect_with_retries(addr: &str, retries: u32) -> Result<TcpStream, Box<dyn Error>> {
+async fn connect_with_retries(addr: &str, retries: u32) -> Result<TcpStream, FrcError> {
     for attempt in 0..retries {
         match TcpStream::connect(addr).await {
             Ok(stream) => return Ok(stream),
             Err(e) => {
                 eprintln!("Failed to connect (attempt {}): {}", attempt + 1, e);
                 if attempt + 1 == retries {
-                    return Err(Box::new(e));
+                    return Err(FrcError::Disconnected());
                 }
                 sleep(Duration::from_secs(2)).await;
             }
         }
     }
-    Err("Exceeded maximum connection attempts".into())
+    return Err(FrcError::Disconnected())
 }

@@ -7,7 +7,7 @@ use packets::Command;
 use packets::Instruction;
 
 use serde::{Deserialize, Serialize};
-
+use int_enum::IntEnum;
 
 pub mod packets;
 pub mod drivers;
@@ -101,8 +101,10 @@ pub enum SpeedType {
 pub enum FrcError{
     Serialization(String),
     UnrecognizedPacket,
-    FanucErrorCode(u32),
-
+    FanucErrorCode(FanucErrorCode),
+    FailedToSend(String),
+    FailedToRecieve(String),
+    Disconnected()
 }
 impl Error for FrcError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
@@ -114,7 +116,10 @@ impl fmt::Display for FrcError {
         match *self {
             FrcError::Serialization(ref msg) => write!(f, "Serialization error: {}", msg),
             FrcError::UnrecognizedPacket => write!(f, "Fanuc threw a unrecognized "),
-            FrcError::FanucErrorCode(ref errorid) => write!(f, "fanuc returned  error#: {}", errorid),
+            FrcError::FanucErrorCode(ref code) => write!(f, "fanuc returned  error#: {}", code.message()),
+            FrcError::FailedToSend(ref msg) => write!(f, "SendError: {}", msg),
+            FrcError::FailedToRecieve(ref msg) => write!(f, "RecieveError: {}", msg),
+            FrcError::Disconnected() => write!(f, "Fanuc appears to be disconnected"),
         }
     }
 }
@@ -128,8 +133,9 @@ pub enum PacketEnum {
     Instruction(Instruction)
 }
 
-#[derive(Debug)]
-enum ErrorCode {
+#[repr(u32)]
+#[derive(Debug, Serialize, Deserialize, IntEnum)]
+enum FanucErrorCode {
     InternalSystemError = 2556929,
     InvalidUToolNumber = 2556930,
     InvalidUFrameNumber = 2556931,
@@ -183,64 +189,66 @@ enum ErrorCode {
     InvalidASCIIStringSize = 2556979,
     InvalidApplicationTool = 2556980,
     InvalidCallProgramName = 2556981,
+    UnrecognizedFrcError = 0,
 }
 
-impl ErrorCode {
+impl FanucErrorCode {
     fn message(&self) -> &str {
         match self {
-            ErrorCode::InternalSystemError => "Internal System Error.",
-            ErrorCode::InvalidUToolNumber => "Invalid UTool Number.",
-            ErrorCode::InvalidUFrameNumber => "Invalid UFrame Number.",
-            ErrorCode::InvalidPositionRegister => "Invalid Position Register.",
-            ErrorCode::InvalidSpeedOverride => "Invalid Speed Override.",
-            ErrorCode::CannotExecuteTPProgram => "Cannot Execute TP program.",
-            ErrorCode::ControllerServoOff => "Controller Servo is Off.",
-            ErrorCode::CannotExecuteTPProgramDuplicate => "Cannot Execute TP program.",
-            ErrorCode::RMINotRunning => "RMI is Not Running.",
-            ErrorCode::TPProgramNotPaused => "TP Program is Not Paused.",
-            ErrorCode::CannotResumeTPProgram => "Cannot Resume TP Program.",
-            ErrorCode::CannotResetController => "Cannot Reset Controller.",
-            ErrorCode::InvalidRMICommand => "Invalid RMI Command.",
-            ErrorCode::RMICommandFail => "RMI Command Fail.",
-            ErrorCode::InvalidControllerState => "Invalid Controller State.",
-            ErrorCode::PleaseCyclePower => "Please Cycle Power.",
-            ErrorCode::InvalidPayloadSchedule => "Invalid Payload Schedule.",
-            ErrorCode::InvalidMotionOption => "Invalid Motion Option.",
-            ErrorCode::InvalidVisionRegister => "Invalid Vision Register.",
-            ErrorCode::InvalidRMIInstruction => "Invalid RMI Instruction.",
-            ErrorCode::InvalidValue => "Invalid Value.",
-            ErrorCode::InvalidTextString => "Invalid Text String.",
-            ErrorCode::InvalidPositionData => "Invalid Position Data.",
-            ErrorCode::RMIInHoldState => "RMI is In HOLD State.",
-            ErrorCode::RemoteDeviceDisconnected => "Remote Device Disconnected.",
-            ErrorCode::RobotAlreadyConnected => "Robot is Already Connected.",
-            ErrorCode::WaitForCommandDone => "Wait for Command Done.",
-            ErrorCode::WaitForInstructionDone => "Wait for Instruction Done.",
-            ErrorCode::InvalidSequenceIDNumber => "Invalid sequence ID number.",
-            ErrorCode::InvalidSpeedType => "Invalid Speed Type.",
-            ErrorCode::InvalidSpeedValue => "Invalid Speed Value.",
-            ErrorCode::InvalidTermType => "Invalid Term Type.",
-            ErrorCode::InvalidTermValue => "Invalid Term Value.",
-            ErrorCode::InvalidLCBPortType => "Invalid LCB Port Type.",
-            ErrorCode::InvalidACCValue => "Invalid ACC Value.",
-            ErrorCode::InvalidDestinationPosition => "Invalid Destination Position.",
-            ErrorCode::InvalidVIAPosition => "Invalid VIA Position.",
-            ErrorCode::InvalidPortNumber => "Invalid Port Number.",
-            ErrorCode::InvalidGroupNumber => "Invalid Group Number.",
-            ErrorCode::InvalidGroupMask => "Invalid Group Mask.",
-            ErrorCode::JointMotionWithCOORD => "Joint motion with COORD.",
-            ErrorCode::IncrementalMotionWithCOORD => "Incremental motn with COORD.",
-            ErrorCode::RobotInSingleStepMode => "Robot in Single Step Mode.",
-            ErrorCode::InvalidPositionDataType => "Invalid Position Data Type.",
-            ErrorCode::ReadyForASCIIPacket => "Ready for ASCII Packet.",
-            ErrorCode::ASCIIConversionFailed => "ASCII Conversion Failed.",
-            ErrorCode::InvalidASCIIInstruction => "Invalid ASCII Instruction.",
-            ErrorCode::InvalidNumberOfGroups => "Invalid Number of Groups.",
-            ErrorCode::InvalidInstructionPacket => "Invalid Instruction packet.",
-            ErrorCode::InvalidASCIIStringPacket => "Invalid ASCII String packet.",
-            ErrorCode::InvalidASCIIStringSize => "Invalid ASCII string size.",
-            ErrorCode::InvalidApplicationTool => "Invalid Application Tool.",
-            ErrorCode::InvalidCallProgramName => "Invalid Call Program Name.",
+            FanucErrorCode::InternalSystemError => "Internal System Error.",
+            FanucErrorCode::InvalidUToolNumber => "Invalid UTool Number.",
+            FanucErrorCode::InvalidUFrameNumber => "Invalid UFrame Number.",
+            FanucErrorCode::InvalidPositionRegister => "Invalid Position Register.",
+            FanucErrorCode::InvalidSpeedOverride => "Invalid Speed Override.",
+            FanucErrorCode::CannotExecuteTPProgram => "Cannot Execute TP program.",
+            FanucErrorCode::ControllerServoOff => "Controller Servo is Off.",
+            FanucErrorCode::CannotExecuteTPProgramDuplicate => "Cannot Execute TP program.",
+            FanucErrorCode::RMINotRunning => "RMI is Not Running.",
+            FanucErrorCode::TPProgramNotPaused => "TP Program is Not Paused.",
+            FanucErrorCode::CannotResumeTPProgram => "Cannot Resume TP Program.",
+            FanucErrorCode::CannotResetController => "Cannot Reset Controller.",
+            FanucErrorCode::InvalidRMICommand => "Invalid RMI Command.",
+            FanucErrorCode::RMICommandFail => "RMI Command Fail.",
+            FanucErrorCode::InvalidControllerState => "Invalid Controller State.",
+            FanucErrorCode::PleaseCyclePower => "Please Cycle Power.",
+            FanucErrorCode::InvalidPayloadSchedule => "Invalid Payload Schedule.",
+            FanucErrorCode::InvalidMotionOption => "Invalid Motion Option.",
+            FanucErrorCode::InvalidVisionRegister => "Invalid Vision Register.",
+            FanucErrorCode::InvalidRMIInstruction => "Invalid RMI Instruction.",
+            FanucErrorCode::InvalidValue => "Invalid Value.",
+            FanucErrorCode::InvalidTextString => "Invalid Text String.",
+            FanucErrorCode::InvalidPositionData => "Invalid Position Data.",
+            FanucErrorCode::RMIInHoldState => "RMI is In HOLD State.",
+            FanucErrorCode::RemoteDeviceDisconnected => "Remote Device Disconnected.",
+            FanucErrorCode::RobotAlreadyConnected => "Robot is Already Connected.",
+            FanucErrorCode::WaitForCommandDone => "Wait for Command Done.",
+            FanucErrorCode::WaitForInstructionDone => "Wait for Instruction Done.",
+            FanucErrorCode::InvalidSequenceIDNumber => "Invalid sequence ID number.",
+            FanucErrorCode::InvalidSpeedType => "Invalid Speed Type.",
+            FanucErrorCode::InvalidSpeedValue => "Invalid Speed Value.",
+            FanucErrorCode::InvalidTermType => "Invalid Term Type.",
+            FanucErrorCode::InvalidTermValue => "Invalid Term Value.",
+            FanucErrorCode::InvalidLCBPortType => "Invalid LCB Port Type.",
+            FanucErrorCode::InvalidACCValue => "Invalid ACC Value.",
+            FanucErrorCode::InvalidDestinationPosition => "Invalid Destination Position.",
+            FanucErrorCode::InvalidVIAPosition => "Invalid VIA Position.",
+            FanucErrorCode::InvalidPortNumber => "Invalid Port Number.",
+            FanucErrorCode::InvalidGroupNumber => "Invalid Group Number.",
+            FanucErrorCode::InvalidGroupMask => "Invalid Group Mask.",
+            FanucErrorCode::JointMotionWithCOORD => "Joint motion with COORD.",
+            FanucErrorCode::IncrementalMotionWithCOORD => "Incremental motn with COORD.",
+            FanucErrorCode::RobotInSingleStepMode => "Robot in Single Step Mode.",
+            FanucErrorCode::InvalidPositionDataType => "Invalid Position Data Type.",
+            FanucErrorCode::ReadyForASCIIPacket => "Ready for ASCII Packet.",
+            FanucErrorCode::ASCIIConversionFailed => "ASCII Conversion Failed.",
+            FanucErrorCode::InvalidASCIIInstruction => "Invalid ASCII Instruction.",
+            FanucErrorCode::InvalidNumberOfGroups => "Invalid Number of Groups.",
+            FanucErrorCode::InvalidInstructionPacket => "Invalid Instruction packet.",
+            FanucErrorCode::InvalidASCIIStringPacket => "Invalid ASCII String packet.",
+            FanucErrorCode::InvalidASCIIStringSize => "Invalid ASCII string size.",
+            FanucErrorCode::InvalidApplicationTool => "Invalid Application Tool.",
+            FanucErrorCode::InvalidCallProgramName => "Invalid Call Program Name.",
+            FanucErrorCode::UnrecognizedFrcError => "Unrecognized FANUC Error ID",
         }
     }
 }

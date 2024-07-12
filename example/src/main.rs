@@ -1,10 +1,10 @@
-use fanuc_rmi::{drivers::{FanucDriver, FanucDriverConfig}, Configuration, Position};
+use fanuc_rmi::{drivers::{FanucDriver, FanucDriverConfig}, Configuration, FrcError, Position};
 // use fanuc_rmi::{Configuration, Position};
 use std::error::Error;
 
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), FrcError > {
 
     let driver_settings = FanucDriverConfig::default();
     let driver = FanucDriver::connect(driver_settings.clone()).await;
